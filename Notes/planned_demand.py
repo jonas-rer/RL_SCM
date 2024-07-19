@@ -19,7 +19,7 @@ while done == False:
 
     if i + lead_time < len(planned_demand):
         expected_demand = planned_demand[i+lead_time]
-        print(f"Expected demand for day {i+1} is {expected_demand}")
+        print(f"Expected demand for day {i+lead_time+1} is {expected_demand}")
     else:
         print("Index out of range")
 
