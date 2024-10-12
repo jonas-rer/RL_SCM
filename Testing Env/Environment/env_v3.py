@@ -39,7 +39,8 @@ class SS_Mngmt_Env(Env):
         # Production time! --> meaning each stock has different stocks... raw material and product
         # Could be implememted with an additional deque for each node. Where new material gets added to the and the oldest gets removed and added to the inventory
 
-        self.episode_length = EP_LENGTH # Length of the episode
+        self.EP_LENGTH = EP_LENGTH # Total length
+        self.episode_length = EP_LENGTH # Current length of the episode
 
         # Seting up the network
         self.network_config = network_config
