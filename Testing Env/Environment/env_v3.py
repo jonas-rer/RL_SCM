@@ -32,12 +32,7 @@ class SS_Mngmt_Env(Env):
     def __init__(self, EP_LENGTH=30, network_config = None, render_mode = None):
 
         # To implement
-        # storage capacities
-        # safety stock
-
-        # Backlog
-        # Production time! --> meaning each stock has different stocks... raw material and product
-        # Could be implememted with an additional deque for each node. Where new material gets added to the and the oldest gets removed and added to the inventory
+        # handling of safety stock
 
         self.EP_LENGTH = EP_LENGTH # Total length
         self.episode_length = EP_LENGTH # Current length of the episode
@@ -58,6 +53,16 @@ class SS_Mngmt_Env(Env):
             if in_edges:  # Check if the list is not empty
                 lead_time = in_edges[0][2]['L']
                 self.order_queues[node] = deque(maxlen=lead_time)
+
+        # Backlog queue for each node
+        self.backlog_queues = {}
+
+        # For each node in the network, create a queue and add it to the dictionary
+        for node in self.graph.nodes:
+            # Get the lead time for the node from the edge leading to it
+            in_edges = list(self.graph.in_edges(node, data=True))
+            if in_edges:
+                self.backlog_queues[node] = deque()
         
         # Setting up the demand
         self.demand = 0
@@ -85,6 +90,8 @@ class SS_Mngmt_Env(Env):
 
         initial_inventories = []
         self.planned_demands = self.planned_demand()
+
+        self.actual_demands = self.actual_demand(self.planned_demands)
 
         for node in self.graph.nodes:
             initial_inventories.append(self.graph.nodes[node].get('I', 0))
@@ -114,83 +121,27 @@ class SS_Mngmt_Env(Env):
     def step(self, action):
         # Returns the next state, reward and whether the episode is done
 
-        # TODO: Demand can only be fullfilled if sufficient stock is available demand is then placed in the backlog queue plus a penalty for stockout
+        # Initialize the reward
+        reward = 0
 
-        # Expected demand for production at timestep t + lead time
-        i = self.EP_LENGTH - self.episode_length
-        if i + self.lead_time < len(self.planned_demand):
-            self.state[1] = self.planned_demand[i + self.lead_time]
+        # Retrieve the actual demand for the current timestep
+        self.current_demand = self.actual_demands[self.EP_LENGTH - self.episode_length - 1]
 
-        # Demand for the current timestep
-        if self.planned_demand[i] > 0:
-            # Calculate the actual demand with a random factor
-            self.demand = self.planned_demand[i] + random.randint(-3, 5)
-        else:
-            self.demand = 0
-
-        # Subtract the demand from the stock
-        self.state[0] = self.state[0] - self.demand
-
-        # For each edge in the network
-        for edge in self.graph.edges:
-
-            # Expected demand for production at timestep t + lead time
-            i = self.EP_LENGTH - self.episode_length
-            if i + self.graph.edges[edge]['L'] < len(self.graph.edges[edge]['D']):
-                self.state[edge][1] = self.graph.edges[edge]['D'][i + self.graph.edges[edge]['L']]
-
-            # Demand for the current timestep
-            if self.graph.edges[edge]['D'][i] > 0:
-                # Calculate the actual demand with a random factor 
-                self.demand[edge] = self.graph.edges[edge]['D'][i] + random.randint(-3, 5)
-            else:
-                self.demand[edge] = 0
-
-            # Subtract the demand from the stock
-            self.state[edge][0] = self.state[edge][0] - self.demand[edge]
-
-        # Iterate over each node in the network
+        # Subtract the demand from the stock level of the corresponding nodes of the state
+        # Leave the demand in the deque for the next timestep if the stock level is negative at first position
         for node in self.graph.nodes:
-            # Get the lead time for the node
-            lead_time = self.graph.in_edges(node, data=True)[0][2]['L']
+            self.state[0][node] -= self.current_demand[node]
+            if self.state[0][node] < 0:
+                self.order_queues[node].append(self.current_demand[node])
+                self.state[0][node] = 0
 
-            # If there are enough steps passed since the order was placed, add the order to the stock
-            if len(self.order_queues[node]) == lead_time:
-                self.delivered[node] = self.order_queues[node].popleft()
-                self.state[node][0] += self.delivered[node]
-                
-            # Add the order to the queue
-            # TODO: This needs to be changed will not work
-            self.order_queues[node].append(action[node])
+        # New orders can be placed and will be added to the deque (order_queues)
 
-        # Calculate the reward based on order costs
-        if action > 0:
-            reward = - self.c_fixed - self.c_variable * action
-        else:
-            reward = 0
+        # Compute the reward based on the order costs and stock level
 
-        # Check if the stock level is negative
-        if self.state[0] < 0:
-            # If the stock level is negative, the added cost is the stockout cost
-            # TODO: The order can only be fullfilled on the next timestep
-            reward -=  self.stockout_cost
-        else:
-            # If the stock level is positive, the cost is the stock level
-            reward -= self.state[0]
+        # If the stock level is negative, add the stockout cost to the reward
 
-        # Calculate the cost of the stock
-        # Reward is negative since we want to minimize the cost
-        # reward = float(reward - (self.state))
-            
-        # for node in self.graph.nodes:
-        #     initial_inventories.append(self.graph.nodes[node].get('I', 0))
-        #     # Get the edges that have the current node as their target
-        #     in_edges = list(self.graph.in_edges(node, data=True))
-        #     # If there are any such edges, get the 'D' value from the first one
-        #     if in_edges:
-        #         expected_demands.append(in_edges[0][2].get('D', 0))
-        #     else:
-        #         expected_demands.append(0)
+        # Check if the episode is done
 
 
         # Check if the episode is done
@@ -359,22 +310,23 @@ class SS_Mngmt_Env(Env):
         # Genrates a random planned demand for each edge in the network
         # over the whole episode. The demand is drawn from a normal distribution
 
-        planned_demand = np.zeros((self.EP_LENGTH, len(self.graph.edges)))
+        planned_demand = np.zeros((self.EP_LENGTH - 1, len(self.graph.edges)))
 
         for edge in self.graph.edges:
-            planned_demand[:, edge] = np.random.normal(10, 2, self.EP_LENGTH)
+            planned_demand[:, edge] = np.random.normal(10, 2, self.EP_LENGTH - 1)
 
         return planned_demand
     
     def actual_demand(self, planned_demand):
 
         # Genrate a random actual demand for each edge in the network
-        # over the whole episode. The demand is drawn from a normal distribution
+        # based on the planned demand from the current timestep. The demand
+        # is drawn from a normal distribution
 
-        actual_demand = np.zeros((self.EP_LENGTH, len(self.graph.edges)))
+        actual_demand = np.zeros(len(self.graph.edges))
 
         for edge in self.graph.edges:
-            actual_demand[:, edge] = np.random.normal(10, 2, self.EP_LENGTH)
+            actual_demand[edge] = planned_demand[edge] + np.random.normal(0, 3)
 
         return actual_demand
 
@@ -407,6 +359,8 @@ class SS_Mngmt_Env(Env):
 
         initial_inventories = []
         expected_demands = []
+
+        # TODO reset actual and planned demand
 
         for node in self.graph.nodes:
             initial_inventories.append(self.graph.nodes[node].get('I', 0))
