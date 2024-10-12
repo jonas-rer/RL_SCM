@@ -37,10 +37,19 @@ class SS_Mngmt_Env(Env):
         self.EP_LENGTH = EP_LENGTH # Total length
         self.episode_length = EP_LENGTH # Current length of the episode
 
+        # Initialize the reward
+        self.reward = 0
+
         # Seting up the network
         self.network_config = network_config
         self.graph = nx.DiGraph()
         self.setup_network(self.network_config)
+
+        # Define the costs
+        self.stockout_cost = 10
+        self.order_cost = 5
+        self.item_cost = 1
+        self.stock_cost = 0.5
 
         # Order delay and queue
         # Initialize an empty dictionary for the order queues
@@ -53,6 +62,9 @@ class SS_Mngmt_Env(Env):
             if in_edges:  # Check if the list is not empty
                 lead_time = in_edges[0][2]['L']
                 self.order_queues[node] = deque(maxlen=lead_time)
+
+                # Fill the queue with zeros
+                self.order_queues[node].extend([0] * lead_time)
 
         # Backlog queue for each node
         self.backlog_queues = {}
@@ -121,28 +133,63 @@ class SS_Mngmt_Env(Env):
     def step(self, action):
         # Returns the next state, reward and whether the episode is done
 
-        # Initialize the reward
-        reward = 0
+        # Orders are delivered from the order queues
+        for node in self.graph.nodes:
+            # Get the index of the node
+            node_index = self.node_to_index[node]
+
+            # Get the order from the order queue
+            order = self.order_queues[node].popleft()
+
+            # Add the order to the stock level
+            self.state[0][node_index] += order
+
+            # Add the order to the delivered list
+            self.delivery_history.append(order)
+
 
         # Retrieve the actual demand for the current timestep
         self.current_demand = self.actual_demands[self.EP_LENGTH - self.episode_length - 1]
 
         # Subtract the demand from the stock level of the corresponding nodes of the state
         # Leave the demand in the deque for the next timestep if the stock level is negative at first position
+
         for node in self.graph.nodes:
-            self.state[0][node] -= self.current_demand[node]
-            if self.state[0][node] < 0:
-                self.order_queues[node].append(self.current_demand[node])
-                self.state[0][node] = 0
+            # Get the index of the node
+            node_index = self.node_to_index[node]
+
+            # Process the backlog first
+            while self.backlog_queues[node] and self.state[0][node_index] > 0:
+                backlog_demand = self.backlog_queues[node][0]
+                if self.state[0][node_index] >= backlog_demand:
+                    self.state[0][node_index] -= backlog_demand
+                    self.backlog_queues[node].pop(0)  # Remove the processed demand from the backlog
+                else:
+                    break  # Not enough stock to fulfill the backlog, so break the loop
+
+            # If there's still stock left after processing the backlog, process the current demand
+            if self.state[0][node_index] >= self.current_demand[node]:
+                self.state[0][node_index] -= self.current_demand[node]
+            else:
+                # Add the demand to the backlog queue
+                self.backlog_queues[node].append(self.current_demand[node])
+
+                # Penalty for stockout
+                self.reward -= self.stockout_cost
 
         # New orders can be placed and will be added to the deque (order_queues)
+        for node, order in zip(self.graph.nodes, action):
+            # Get the index of the node
+            node_index = self.node_to_index[node]
+
+            # Add the order to the order queue
+            self.order_queues[node].append(order)
+
+            # Compute the order cost
+            self.reward -= self.order_cost * order
 
         # Compute the reward based on the order costs and stock level
-
-        # If the stock level is negative, add the stockout cost to the reward
-
-        # Check if the episode is done
-
+        self.reward -= np.sum(self.state[0] * self.stock_cost)
 
         # Check if the episode is done
         done = self.episode_length == 0
@@ -153,7 +200,7 @@ class SS_Mngmt_Env(Env):
         obs = np.array([self.state[0], self.state[1]])
 
         # Append the state to the history
-        self.reward_history.append(reward)
+        self.reward_history.append(self.reward)
         self.stock_history.append(self.state[0])
         self.order_history.append(action)
         self.demand_history.append(self.demand)
@@ -172,7 +219,7 @@ class SS_Mngmt_Env(Env):
         # Check if the episode is truncated
         truncated = False
 
-        return obs, float(reward), done, truncated, info
+        return obs, float(self.reward), done, truncated, info
 
     def render(self):
         # Just check episode lenghth and only plot the last one when using matplotlib          
@@ -305,6 +352,10 @@ class SS_Mngmt_Env(Env):
         plt.axis('off')  # Turn off the axis
         plt.show()
 
+    def node_to_index(self, node):
+        # Creates a mapping from node names to indices
+        return list(self.graph.nodes).index(node)
+
     def planned_demand(self):
 
         # Genrates a random planned demand for each edge in the network
@@ -340,6 +391,8 @@ class SS_Mngmt_Env(Env):
 
         # Reset the episode length
         self.episode_length = self.EP_LENGTH
+
+        self.reward = 0
 
         # Reset the network
         self.graph = nx.DiGraph()
