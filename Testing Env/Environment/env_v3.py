@@ -96,7 +96,7 @@ class SS_Mngmt_Env(Env):
         for node in self.graph.nodes:
             initial_inventories.append(self.graph.nodes[node].get('I', 0))
             # Get the edges that have the current node as their target
-            in_edges = self.graph.in_edges(node, data=True)
+            in_edges = list(self.graph.in_edges(node, data=True))
             # If there are any such edges, get the 'D' value from the first one
             if in_edges:
                 expected_demands.append(in_edges[0][2].get('D', 0))
@@ -109,6 +109,7 @@ class SS_Mngmt_Env(Env):
         # TODO
         # Empty dataframe for plotting the history and analysis
         # self.history = pd.DataFrame(columns = ['Stock Level', 'Order', 'Demand'])
+        # Probably makes sense to have as a separate method
 
         # History
         self.reward_history = []
