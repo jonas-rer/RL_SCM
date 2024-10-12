@@ -350,11 +350,35 @@ class SS_Mngmt_Env(Env):
         nx.draw_networkx_edge_labels(self.graph, pos, edge_labels=edge_labels)
 
         # Set plot title
-        plt.title("Network Graph with Hierarchical Layout (Graphviz)", fontsize=15)
+        plt.title("Supply Chain Network Graph", fontsize=15)
 
         # Display the plot
         plt.axis('off')  # Turn off the axis
         plt.show()
+
+    def planned_demand(self):
+
+        # Genrates a random planned demand for each edge in the network
+        # over the whole episode. The demand is drawn from a normal distribution
+
+        planned_demand = np.zeros((self.EP_LENGTH, len(self.graph.edges)))
+
+        for edge in self.graph.edges:
+            planned_demand[:, edge] = np.random.normal(10, 2, self.EP_LENGTH)
+
+        return planned_demand
+    
+    def actual_demand(self):
+
+        # Genrate a random actual demand for each edge in the network
+        # over the whole episode. The demand is drawn from a normal distribution
+
+        planned_demand = np.zeros((self.EP_LENGTH, len(self.graph.edges)))
+
+        for edge in self.graph.edges:
+            planned_demand[:, edge] = np.random.normal(10, 2, self.EP_LENGTH)
+
+        return planned_demand
 
 
     def reset(self, seed = None):
