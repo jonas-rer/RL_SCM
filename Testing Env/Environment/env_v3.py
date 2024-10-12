@@ -29,7 +29,7 @@ class SS_Mngmt_Env(Env):
     metadata = {"render_modes": ["human"], "render_fps": 4}
     
     # Define the action and observation space
-    def __init__(self, EP_LENGTH=30, network_config=None, render_mode = None):
+    def __init__(self, EP_LENGTH=30, network_config = None, render_mode = None):
 
         # To implement
         # storage capacities
@@ -45,15 +45,11 @@ class SS_Mngmt_Env(Env):
         # Seting up the network
         self.network_config = network_config
         self.graph = nx.DiGraph()
-        self.setup_network()
+        self.setup_network(self.network_config)
 
         # Order delay and queue
         # Initialize an empty dictionary for the order queues
         self.order_queues = {}
-
-        # # For each node in the network, create a queue and add it to the dictionary
-        # for node in self.graph.nodes:
-        #     self.order_queues[node] = deque(maxlen=self.lead_time)
 
         # For each node in the network, create a queue and add it to the dictionary
         for node in self.graph.nodes:
@@ -62,10 +58,6 @@ class SS_Mngmt_Env(Env):
             if in_edges:  # Check if the list is not empty
                 lead_time = in_edges[0][2]['L']
                 self.order_queues[node] = deque(maxlen=lead_time)
-
-        # Demand
-        # TODO change that demand comes from a distribution
-        # TODO allow for loading the planned demand from a file
         
         # Setting up the demand
         self.demand = 0
@@ -92,20 +84,13 @@ class SS_Mngmt_Env(Env):
         self.state = {}
 
         initial_inventories = []
-        expected_demands = []
+        self.planned_demands = self.planned_demand()
 
         for node in self.graph.nodes:
             initial_inventories.append(self.graph.nodes[node].get('I', 0))
-            # Get the edges that have the current node as their target
-            in_edges = list(self.graph.in_edges(node, data=True))
-            # If there are any such edges, get the 'D' value from the first one
-            if in_edges:
-                expected_demands.append(in_edges[0][2].get('D', 0))
-            else:
-                expected_demands.append(0)
 
         # Convert the lists to a numpy array
-        self.state = np.array([initial_inventories] + [expected_demands])
+        self.state = np.array([initial_inventories] + [self.planned_demands])
 
         # TODO
         # Empty dataframe for plotting the history and analysis
@@ -196,6 +181,17 @@ class SS_Mngmt_Env(Env):
         # Calculate the cost of the stock
         # Reward is negative since we want to minimize the cost
         # reward = float(reward - (self.state))
+            
+        # for node in self.graph.nodes:
+        #     initial_inventories.append(self.graph.nodes[node].get('I', 0))
+        #     # Get the edges that have the current node as their target
+        #     in_edges = list(self.graph.in_edges(node, data=True))
+        #     # If there are any such edges, get the 'D' value from the first one
+        #     if in_edges:
+        #         expected_demands.append(in_edges[0][2].get('D', 0))
+        #     else:
+        #         expected_demands.append(0)
+
 
         # Check if the episode is done
         done = self.episode_length == 0
@@ -238,6 +234,8 @@ class SS_Mngmt_Env(Env):
 
         # To Do
         # LEGACY CODE
+
+        # Change that it prints the states of each node (inventory etc.)
 
         # Create a list of timestamps for the order history
         timestamps = np.arange(len(self.order_history))
@@ -311,9 +309,9 @@ class SS_Mngmt_Env(Env):
         
         return
     
-    def setup_network(self):
+    def setup_network(self, network_config = None):
         # Load the network configuration from a JSON string
-        config = json.loads(self.network_config)
+        config = json.loads(network_config)
 
         # Add nodes to the graph
         for node, attributes in config['nodes'].items():
@@ -368,7 +366,7 @@ class SS_Mngmt_Env(Env):
 
         return planned_demand
     
-    def actual_demand(self):
+    def actual_demand(self, planned_demand):
 
         # Genrate a random actual demand for each edge in the network
         # over the whole episode. The demand is drawn from a normal distribution
@@ -392,14 +390,20 @@ class SS_Mngmt_Env(Env):
         self.episode_length = self.EP_LENGTH
 
         # Reset the network
-        self.setup_network()
+        self.graph = nx.DiGraph()
+        self.setup_network(self.network_config)
 
-        # Demand
-        self.expected_demand = 0 # Expected demand for production
-        self.delivered = 0
+        # Order delay and queue
+        # Initialize an empty dictionary for the order queues
+        self.order_queues = {}
 
-        # Reset the order queue
-        self.order_queue.clear()
+        # For each node in the network, create a queue and add it to the dictionary
+        for node in self.graph.nodes:
+            # Get the lead time for the node from the edge leading to it
+            in_edges = list(self.graph.in_edges(node, data=True))
+            if in_edges:  # Check if the list is not empty
+                lead_time = in_edges[0][2]['L']
+                self.order_queues[node] = deque(maxlen=lead_time)
 
         initial_inventories = []
         expected_demands = []
