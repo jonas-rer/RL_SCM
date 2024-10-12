@@ -237,7 +237,7 @@ class SS_Mngmt_Env(Env):
     def render_human(self):
 
         # To Do
-        # Actual vs. Expected Demand
+        # LEGACY CODE
 
         # Create a list of timestamps for the order history
         timestamps = np.arange(len(self.order_history))
@@ -373,12 +373,12 @@ class SS_Mngmt_Env(Env):
         # Genrate a random actual demand for each edge in the network
         # over the whole episode. The demand is drawn from a normal distribution
 
-        planned_demand = np.zeros((self.EP_LENGTH, len(self.graph.edges)))
+        actual_demand = np.zeros((self.EP_LENGTH, len(self.graph.edges)))
 
         for edge in self.graph.edges:
-            planned_demand[:, edge] = np.random.normal(10, 2, self.EP_LENGTH)
+            actual_demand[:, edge] = np.random.normal(10, 2, self.EP_LENGTH)
 
-        return planned_demand
+        return actual_demand
 
 
     def reset(self, seed = None):
@@ -391,25 +391,32 @@ class SS_Mngmt_Env(Env):
         # Reset the episode length
         self.episode_length = self.EP_LENGTH
 
+        # Reset the network
+        self.setup_network()
+
         # Demand
-        self.planned_demand = [0, 0, 0, 0, 0, 15,
-                                0, 0, 0, 0, 0, 15,
-                                0, 0, 0, 0, 0, 15,
-                                0, 0, 0, 0, 0, 15,
-                                0, 0, 0, 0, 0, 15,
-                                0, 0, 0, 0, 0, 15
-                                ]
-        
         self.expected_demand = 0 # Expected demand for production
         self.delivered = 0
 
         # Reset the order queue
         self.order_queue.clear()
 
-        # Define the initial state
-        self.state = np.array([self.I, 0])
+        initial_inventories = []
+        expected_demands = []
 
-        obs = np.array([self.state[0], self.state[1]])
+        for node in self.graph.nodes:
+            initial_inventories.append(self.graph.nodes[node].get('I', 0))
+            # Get the edges that have the current node as their target
+            in_edges = list(self.graph.in_edges(node, data=True))
+            # If there are any such edges, get the 'D' value from the first one
+            if in_edges:
+                expected_demands.append(in_edges[0][2].get('D', 0))
+            else:
+                expected_demands.append(0)
+
+        # Setting state and observation
+        self.state = np.array([initial_inventories] + [expected_demands])
+        obs = np.array([initial_inventories] + [expected_demands])
 
         # # Append history to the dataframe
         # self.history['Stock Level'] = self.stock_history
