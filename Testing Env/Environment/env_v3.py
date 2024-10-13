@@ -52,29 +52,10 @@ class SS_Mngmt_Env(Env):
         self.stock_cost = 0.5
 
         # Order delay and queue
-        # Initialize an empty dictionary for the order queues
-        self.order_queues = {}
-
-        # For each node in the network, create a queue and add it to the dictionary
-        for node in self.graph.nodes:
-            # Get the lead time for the node from the edge leading to it
-            in_edges = list(self.graph.in_edges(node, data=True))
-            if in_edges:  # Check if the list is not empty
-                lead_time = in_edges[0][2]['L']
-                self.order_queues[node] = deque(maxlen=lead_time)
-
-                # Fill the queue with zeros
-                self.order_queues[node].extend([0] * lead_time)
+        self.order_queues = self.order_queue()
 
         # Backlog queue for each node
-        self.backlog_queues = {}
-
-        # For each node in the network, create a queue and add it to the dictionary
-        for node in self.graph.nodes:
-            # Get the lead time for the node from the edge leading to it
-            in_edges = list(self.graph.in_edges(node, data=True))
-            if in_edges:
-                self.backlog_queues[node] = deque()
+        self.backlog_queues = self.backlog_queue()
         
         # Define action space
         # The action space is a box with dimensions equal to the number of nodes
@@ -207,7 +188,6 @@ class SS_Mngmt_Env(Env):
         self.reward_history.append(self.reward)
         self.stock_history.append(self.state[0])
         self.order_history.append(action)
-        self.demand_history.append(self.demand)
 
         # Check if episode is done
         if self.episode_length <= 0: 
@@ -232,80 +212,10 @@ class SS_Mngmt_Env(Env):
 
     def render_human(self):
 
-        # To Do
-        # LEGACY CODE
-
-        # Change that it prints the states of each node (inventory etc.)
-
-        # Create a list of timestamps for the order history
-        timestamps = np.arange(len(self.order_history))
-
-        # Setting up the plot
-        fig, ax = plt.subplots(3, 2, figsize=(12, 9)) # 1 row and 2 columns
-        bar_width = 0.35
-        
-        # Plotting the stock level
-        ax[0, 0].plot(self.stock_history, color = 'blue', label = 'Stock Level')
-        ax[0, 0].set_ylabel('Stock Level')
-        # ax[0, 0].set_xlabel('Time')
-        ax[0, 0].set_title('Stock Level vs. Time')
-        ax[0, 0].set_xticks(np.arange(0, 40, step=5))
-        ax[0, 0].set_yticks(np.arange(0, 105, step=10))
-
-        # Plotting the order, delivered and demand
-        ax[1, 0].bar(timestamps - bar_width, self.order_history, bar_width, color='blue', alpha = 0.5, label='Order')
-        ax[1, 0].bar(timestamps, self.delivery_history, bar_width, color='red', alpha = 0.5, label='Delivery')
-        ax[1, 0].bar(timestamps + bar_width, self.demand_history, bar_width, color='green', alpha=0.5, label='Demand')
-        ax[1, 0].set_ylabel('Order/Delivery/Demand')
-        ax[1, 0].set_title('Order vs. Delivery vs. Demand')
-        ax[1, 0].set_xticks(np.arange(0, 40, step=5))
-        ax[1, 0].legend(['Order', 'Delivery', 'Demand'])
-
-        # Plotting the reward per timestep
-        ax[0, 1].plot(self.reward_history, color = 'purple', label = 'Reward')
-        ax[0, 1].set_ylabel('Reward')
-        # ax[0, 1].set_xlabel('Time')
-        ax[0, 1].set_title('Reward vs. Time')
-        ax[0, 1].set_xticks(np.arange(0, 40, step=5))
-
-        # Plotting the accumulated reward
-        ax[1, 1].plot(np.cumsum(self.reward_history), color = 'orange', label = 'Accumulated Reward')
-        ax[1, 1].set_ylabel('Accumulated Reward')
-        # ax[1, 1].set_xlabel('Time')
-        ax[1, 1].set_title('Accumulated Reward vs. Time')
-        ax[1, 1].set_xticks(np.arange(0, 40, step=5))
-
-        # Plotting the expected demand and actual demand
-        # TODO --> Shift the expected demand by 3 timesteps and show only the difference
-        # ax[2, 0].plot(self.expected_demand_history, color = 'blue', label = 'Expected Demand')
-        # ax[2, 0].plot(self.demand_history, color = 'green', label = 'Actual Demand')
-        # ax[2, 0].set_ylabel('Demand')
-        # ax[2, 0].set_title('Expected vs. Actual Demand')
-        # ax[2, 0].set_xticks(np.arange(0, 40, step=5))
-
-        # Shift the expected demand by 3 timesteps to the right
-        shifted_expected_demand = np.roll(self.expected_demand_history, 3)
-
-        # Compute the difference between the expected and actual demand
-        demand_difference = shifted_expected_demand - self.demand_history
-
-        # Plotting the shifted expected demand and actual demand
-        ax[2, 0].plot(shifted_expected_demand, color = 'blue', label = 'Expected Demand')
-        ax[2, 0].plot(self.demand_history, color = 'green', label = 'Actual Demand')
-        ax[2, 0].set_ylabel('Demand')
-        ax[2, 0].set_title('Expected vs. Actual Demand')
-        ax[2, 0].set_xticks(np.arange(0, 40, step=5))
-
-        # Plotting the difference between the expected and actual demand
-        ax[2, 1].plot(demand_difference, color = 'red', label = 'Demand Difference')
-        ax[2, 1].set_ylabel('Demand Difference')
-        ax[2, 1].set_title('Difference between Expected and Actual Demand')
-        ax[2, 1].set_xticks(np.arange(0, 40, step=5))
-
-        # Show the plot if the episode is done
-        if self.episode_length == 0:
-            # plt.tight_layout()
-            plt.show()
+        # Print for every timestep the stock level, order, demand and reward
+        print(f"Stock Level: {self.state[0]}")
+        print(f"Order: {self.order_history[-1]}")
+        print(f"Reward: {self.reward}")
         
         return
     
@@ -392,6 +302,36 @@ class SS_Mngmt_Env(Env):
                     actual_demand[i, j] = max(0, actual_demand[i, j] + noise)
 
         return actual_demand
+    
+    def order_queue(self):
+        # Create a dictionary for the order queues
+        order_queues = {}
+
+        for node in self.graph.nodes:
+
+            if node not in ['S', 'D']:
+                in_edges = list(self.graph.in_edges(node, data=True))
+
+                if in_edges:
+                    lead_time = in_edges[0][2]['L']
+                    order_queues[node] = deque(maxlen=lead_time)
+
+                    order_queues[node].extend([0] * lead_time)
+
+        return order_queues
+    
+    def backlog_queue(self):
+        # Create a dictionary for the backlog queues
+        backlog_queues = {}
+
+        for node in self.graph.nodes:
+            if node not in ['S', 'D']:
+
+                in_edges = list(self.graph.in_edges(node, data=True))
+                if in_edges:
+                    backlog_queues[node] = deque()
+
+        return backlog_queues
 
 
     def reset(self, seed = None):
@@ -412,17 +352,10 @@ class SS_Mngmt_Env(Env):
 
         # Order delay and queue
         # Initialize an empty dictionary for the order queues
-        self.order_queues = {}
+        self.order_queues = self.order_queue()
 
-        # For each node in the network, create a queue and add it to the dictionary
-        for node in self.graph.nodes:
-            # Get the lead time for the node from the edge leading to it
-            in_edges = list(self.graph.in_edges(node, data=True))
-            if in_edges:  # Check if the list is not empty
-                lead_time = in_edges[0][2]['L']
-                self.order_queues[node] = deque(maxlen=lead_time)
-
-        # TODO reset actual and planned demand
+        # Backlog queue for each node
+        self.backlog_queues = self.backlog_queue()
 
         # Define the initial state
         self.planned_demands = self.planned_demand()
