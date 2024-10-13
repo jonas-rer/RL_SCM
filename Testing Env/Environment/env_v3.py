@@ -83,8 +83,8 @@ class SS_Mngmt_Env(Env):
         # Define action space
         # The action space is a box with dimensions equal to the number of nodes
         # This represents the order amount for each node
-        low = np.zeros(len(self.graph.nodes))  # minimum order amount for each node
-        high = np.full(len(self.graph.nodes), 100)  # maximum order amount for each node
+        low = np.zeros(len(self.graph.nodes - 2))  # minimum order amount for each node
+        high = np.full(len(self.graph.nodes - 2), 100)  # maximum order amount for each node
 
         self.action_space = Box(low=low, high=high, dtype=np.int64)
 
@@ -157,38 +157,37 @@ class SS_Mngmt_Env(Env):
         # Leave the demand in the deque for the next timestep if the stock level is negative at first position
 
         for node in self.graph.nodes:
-            # Get the index of the node
-            node_index = self.node_to_index[node]
+            
+            if node not in ['S', 'D']:
 
-            # Process the backlog first
-            while self.backlog_queues[node] and self.state[0][node_index] > 0:
-                backlog_demand = self.backlog_queues[node][0]
-                if self.state[0][node_index] >= backlog_demand:
-                    self.state[0][node_index] -= backlog_demand
-                    self.backlog_queues[node].pop(0)  # Remove the processed demand from the backlog
+                # Get the index of the node
+                node_index = self.node_to_index[node]
+
+                # Process the backlog first
+                while self.backlog_queues[node] and self.state[0][node_index] > 0:
+                    backlog_demand = self.backlog_queues[node][0]
+                    if self.state[0][node_index] >= backlog_demand:
+                        self.state[0][node_index] -= backlog_demand
+                        self.backlog_queues[node].pop(0)  # Remove the processed demand from the backlog
+                    else:
+                        break  # Not enough stock to fulfill the backlog, so break the loop
+
+                # If there's still stock left after processing the backlog, process the current demand
+                if self.state[0][node_index] >= self.current_demand[node_index]:
+                    self.state[0][node_index] -= self.current_demand[node_index]
                 else:
-                    break  # Not enough stock to fulfill the backlog, so break the loop
+                    # Add the demand to the backlog queue
+                    self.backlog_queues[node].append(self.current_demand[node_index])
 
-            # If there's still stock left after processing the backlog, process the current demand
-            if self.state[0][node_index] >= self.current_demand[node_index]:
-                self.state[0][node_index] -= self.current_demand[node_index]
-            else:
-                # Add the demand to the backlog queue
-                self.backlog_queues[node].append(self.current_demand[node_index])
+                    # Penalty for stockout
+                    self.reward -= self.stockout_cost
 
-                # Penalty for stockout
-                self.reward -= self.stockout_cost
+                # New orders can be placed and will be added to the deque (order_queues)
+                # Add the order to the order queue
+                self.order_queues[node].append(action[node_index])
 
-        # New orders can be placed and will be added to the deque (order_queues)
-        for node, order in zip(self.graph.nodes, action):
-            # Get the index of the node
-            node_index = self.node_to_index[node]
-
-            # Add the order to the order queue
-            self.order_queues[node].append(order)
-
-            # Compute the order cost
-            self.reward -= self.order_cost * order
+                # Compute the order cost
+                self.reward -= self.order_cost * (order * self.item_cost)
 
         # Compute the reward based on the order costs and stock level
         self.reward -= np.sum(self.state[0] * self.stock_cost)
