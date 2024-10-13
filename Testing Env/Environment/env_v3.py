@@ -151,7 +151,7 @@ class SS_Mngmt_Env(Env):
 
 
         # Retrieve the actual demand for the current timestep
-        self.current_demand = self.actual_demands[self.EP_LENGTH - self.episode_length - 1]
+        self.current_demand = self.actual_demands[self.EP_LENGTH - self.episode_length]
 
         # Subtract the demand from the stock level of the corresponding nodes of the state
         # Leave the demand in the deque for the next timestep if the stock level is negative at first position
@@ -170,11 +170,11 @@ class SS_Mngmt_Env(Env):
                     break  # Not enough stock to fulfill the backlog, so break the loop
 
             # If there's still stock left after processing the backlog, process the current demand
-            if self.state[0][node_index] >= self.current_demand[node]:
-                self.state[0][node_index] -= self.current_demand[node]
+            if self.state[0][node_index] >= self.current_demand[node_index]:
+                self.state[0][node_index] -= self.current_demand[node_index]
             else:
                 # Add the demand to the backlog queue
-                self.backlog_queues[node].append(self.current_demand[node])
+                self.backlog_queues[node].append(self.current_demand[node_index])
 
                 # Penalty for stockout
                 self.reward -= self.stockout_cost
@@ -359,17 +359,18 @@ class SS_Mngmt_Env(Env):
         return list(self.graph.nodes).index(node)
 
     def planned_demand(self):
-
-        # Genrates a random planned demand for each edge in the network
+        # Generates a random planned demand for each edge in the network
         # over the whole episode. The demand is drawn from a normal distribution
         edges_leading_to_D = [edge for edge in self.graph.edges if edge[1] == 'D']
 
         # Create the planned_demand array based on these edges
         planned_demand = np.zeros((self.EP_LENGTH - 1, len(edges_leading_to_D)))
 
-        for i, edge in enumerate(self.graph.edges):
-            if edge[1] == 'D':
-                planned_demand[:, i] = np.random.normal(10, 2, self.EP_LENGTH - 1)
+        for i, edge in enumerate(edges_leading_to_D):
+            for j in range(self.EP_LENGTH - 1):
+                # Introduce a probability of having demand
+                if np.random.rand() < 0.5:  # 50% chance of having demand
+                    planned_demand[j, i] = np.random.normal(10, 2)
 
         return planned_demand
     
@@ -380,11 +381,13 @@ class SS_Mngmt_Env(Env):
         # is drawn from a normal distribution
         actual_demand = np.copy(planned_demand)
 
-        for i in range(self.EP_LENGTH - 1):
-            for j in range(len(self.graph.edges)):
+        for i in range(actual_demand.shape[0]):
+            for j in range(actual_demand.shape[1]):
                 # Add a small random noise to the planned demand
-                noise = np.random.normal(0, 2)
-                actual_demand[i, j] += noise
+                if planned_demand[i, j] > 0:
+                    noise = np.random.normal(0, 5)
+                    # Ensure actual demand is not less than 0
+                    actual_demand[i, j] = max(0, actual_demand[i, j] + noise)
 
         return actual_demand
 
