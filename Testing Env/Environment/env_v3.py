@@ -83,30 +83,39 @@ class SS_Mngmt_Env(Env):
         # Define action space
         # The action space is a box with dimensions equal to the number of nodes
         # This represents the order amount for each node
-        low = np.zeros(len(self.graph.nodes - 2))  # minimum order amount for each node
-        high = np.full(len(self.graph.nodes - 2), 100)  # maximum order amount for each node
+        low = np.zeros(len(self.graph.nodes) - 2)  # minimum order amount for each node
+        high = np.full(len(self.graph.nodes) - 2, 100)  # maximum order amount for each node
 
         self.action_space = Box(low=low, high=high, dtype=np.int64)
 
         # Define observation space
-        # This represents the stock level and expected demand for each node
-        low = np.concatenate([np.zeros(len(self.graph.nodes)), np.zeros(len(self.graph.nodes))])
-        max_stock = np.full(len(self.graph.nodes), 100)
-        max_demand = np.full(len(self.graph.nodes), 100)
-        high = np.concatenate([max_stock, max_demand])
+        # Number of nodes including 'S' and 'D'
+        num_nodes = len(self.graph.nodes) - 2
+
+        # Define the lower bounds for stock level and expected demand
+        low_stock = np.zeros(num_nodes)
+        low_demand = np.zeros(num_nodes)
+        low = np.concatenate([low_stock, low_demand])
+
+        # Define the upper bounds for stock level and expected demand
+        high_stock = np.full(num_nodes, 100)
+        high_demand = np.full(num_nodes, 100)
+        high = np.concatenate([high_stock, high_demand])
 
         self.observation_space = Box(low=low, high=high, dtype=np.int64)
 
         # Define the initial state
         self.state = {}
 
-        initial_inventories = []
         self.planned_demands = self.planned_demand()
 
         self.actual_demands = self.actual_demand(self.planned_demands)
 
+        initial_inventories = []
         for node in self.graph.nodes:
-            initial_inventories.append(self.graph.nodes[node].get('I', 0))
+
+            if node not in ['S', 'D']:
+                initial_inventories.append(self.graph.nodes[node].get('I', 0))
 
         initial_inventories = np.array(initial_inventories)   
 
@@ -198,15 +207,16 @@ class SS_Mngmt_Env(Env):
         # Decrease the episode length
         self.episode_length -= 1
 
-        obs = np.array([self.state[0], self.state[1]])
+        # Update the observation space
+        obs = np.concatenate([self.state[0], self.state[1]])
+
+        # TODO Does it improve if state[1] the demand is updated with the actual demand for each step?
 
         # Append the state to the history
         self.reward_history.append(self.reward)
         self.stock_history.append(self.state[0])
         self.order_history.append(action)
         self.demand_history.append(self.demand)
-        self.expected_demand_history.append(self.state[1])
-        self.delivery_history.append(self.delivered)
 
         # Check if episode is done
         if self.episode_length <= 0: 
@@ -370,6 +380,8 @@ class SS_Mngmt_Env(Env):
                 # Introduce a probability of having demand
                 if np.random.rand() < 0.5:  # 50% chance of having demand
                     planned_demand[j, i] = np.random.normal(10, 2)
+
+        # TODO make sure that the demand has the right shape
 
         return planned_demand
     
