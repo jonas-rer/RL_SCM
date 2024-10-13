@@ -76,10 +76,6 @@ class SS_Mngmt_Env(Env):
             if in_edges:
                 self.backlog_queues[node] = deque()
         
-        # Setting up the demand
-        self.demand = 0
-        self.expected_demand = np.zeros(len(self.graph.nodes))
-
         # Define action space
         # The action space is a box with dimensions equal to the number of nodes
         # This represents the order amount for each node
@@ -93,20 +89,18 @@ class SS_Mngmt_Env(Env):
         num_nodes = len(self.graph.nodes) - 2
 
         # Define the lower bounds for stock level and expected demand
-        low_stock = np.zeros(num_nodes)
-        low_demand = np.zeros(num_nodes)
+        low_stock = np.zeros((1, num_nodes))
+        low_demand = np.zeros((self.EP_LENGTH - 1, num_nodes))
         low = np.concatenate([low_stock, low_demand])
 
         # Define the upper bounds for stock level and expected demand
-        high_stock = np.full(num_nodes, 100)
-        high_demand = np.full(num_nodes, 100)
+        high_stock = np.full((1, num_nodes), 100)
+        high_demand = np.full((self.EP_LENGTH - 1, num_nodes), 100)
         high = np.concatenate([high_stock, high_demand])
 
-        self.observation_space = Box(low=low, high=high, dtype=np.int64)
+        self.observation_space = Box(low=low, high=high, dtype=np.float64)
 
         # Define the initial state
-        self.state = {}
-
         self.planned_demands = self.planned_demand()
 
         self.actual_demands = self.actual_demand(self.planned_demands)
@@ -117,10 +111,11 @@ class SS_Mngmt_Env(Env):
             if node not in ['S', 'D']:
                 initial_inventories.append(self.graph.nodes[node].get('I', 0))
 
-        initial_inventories = np.array(initial_inventories)   
+        initial_inventories = np.array(initial_inventories)
+        initial_inventories = initial_inventories.reshape(1, initial_inventories.shape[0])   
 
         # Now you can combine them
-        self.state = [initial_inventories, self.planned_demands]
+        self.state = np.concatenate([initial_inventories, self.planned_demands])
 
         # TODO
         # Empty dataframe for plotting the history and analysis
@@ -147,7 +142,7 @@ class SS_Mngmt_Env(Env):
         # Orders are delivered from the order queues
         for node in self.graph.nodes:
             # Get the index of the node
-            node_index = self.node_to_index[node]
+            node_index = self.node_to_index(node)
 
             # Get the order from the order queue
             order = self.order_queues[node].popleft()
@@ -170,7 +165,7 @@ class SS_Mngmt_Env(Env):
             if node not in ['S', 'D']:
 
                 # Get the index of the node
-                node_index = self.node_to_index[node]
+                node_index = self.node_to_index(node)
 
                 # Process the backlog first
                 while self.backlog_queues[node] and self.state[0][node_index] > 0:
@@ -208,7 +203,8 @@ class SS_Mngmt_Env(Env):
         self.episode_length -= 1
 
         # Update the observation space
-        obs = np.concatenate([self.state[0], self.state[1]])
+        # obs = np.concatenate([self.state[0].reshape(1, -1), self.planned_demands[self.EP_LENGTH - self.episode_length:]])
+        obs = np.concatenate([self.state[0].reshape(1, self.state[0].shape[0]), self.planned_demands])
 
         # TODO Does it improve if state[1] the demand is updated with the actual demand for each step?
 
@@ -431,24 +427,25 @@ class SS_Mngmt_Env(Env):
                 lead_time = in_edges[0][2]['L']
                 self.order_queues[node] = deque(maxlen=lead_time)
 
-        initial_inventories = []
-        expected_demands = []
-
         # TODO reset actual and planned demand
 
-        for node in self.graph.nodes:
-            initial_inventories.append(self.graph.nodes[node].get('I', 0))
-            # Get the edges that have the current node as their target
-            in_edges = list(self.graph.in_edges(node, data=True))
-            # If there are any such edges, get the 'D' value from the first one
-            if in_edges:
-                expected_demands.append(in_edges[0][2].get('D', 0))
-            else:
-                expected_demands.append(0)
+        # Define the initial state
+        self.planned_demands = self.planned_demand()
 
-        # Setting state and observation
-        self.state = np.array([initial_inventories] + [expected_demands])
-        obs = np.array([initial_inventories] + [expected_demands])
+        self.actual_demands = self.actual_demand(self.planned_demands)
+
+        initial_inventories = []
+        for node in self.graph.nodes:
+
+            if node not in ['S', 'D']:
+                initial_inventories.append(self.graph.nodes[node].get('I', 0))
+
+        initial_inventories = np.array(initial_inventories)
+        initial_inventories = initial_inventories.reshape(1, initial_inventories.shape[0])   
+
+        self.state = np.concatenate([initial_inventories, self.planned_demands])
+
+        obs = np.copy(self.state)
 
         # # Append history to the dataframe
         # self.history['Stock Level'] = self.stock_history
