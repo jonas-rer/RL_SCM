@@ -227,38 +227,6 @@ class SS_Mngmt_Env(Env):
         
         self.save_data(path)
 
-        # timestep = self.EP_LENGTH - self.episode_length
-
-        # Print for every timestep the stock level, order, demand and reward
-        # print()
-        # print(f"Time Step: {timestep}")
-        # print(f"Stock Level: {self.stock_history[timestep]}")
-        # print(f"Action: {self.action_history[timestep]}")
-        # print(f"Demand: {self.demand_history[timestep]}")
-        # print(f"Delivery: {self.delivery_history[timestep]}")
-        # print(f"Reward: {self.reward}")
-        # print()
-        
-        # # Plot the stock level, order, demand and reward
-        # if self.episode_length == 0:
-        #     plt.figure(figsize=(10, 6))
-            
-        #     for index in range(len(list(self.graph.nodes)) - 2):
-        #         node_name = self.get_node_name(index)
-        #         plt.plot(self.stock_history[index], label=f'Stock Level {node_name}')
-        #         plt.plot(self.action_history[index], label=f'Order {node_name}')
-        #         plt.plot(self.demand_history[index], label=f'Demand {node_name}')
-        #         plt.plot(self.delivery_history[index], label=f'Delivery {node_name}')
-
-        #     plt.xlabel('Time Steps')
-        #     plt.ylabel('Stock Level')
-        #     plt.title('Stock Level, Order, Demand and Delivery')
-        #     plt.legend()
-        #     plt.show()
-
-        #     # Save the plot
-        #     plt.savefig('stock_order_demand_reward.png')
-
         return
     
     def save_data(self, path):
