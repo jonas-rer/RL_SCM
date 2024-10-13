@@ -29,7 +29,7 @@ class SS_Mngmt_Env(Env):
     metadata = {"render_modes": ["human"], "render_fps": 4}
     
     # Define the action and observation space
-    def __init__(self, EP_LENGTH=30, network_config = None, render_mode = None):
+    def __init__(self, EP_LENGTH = 30, network_config = None, render_mode = None):
 
         # To implement
         # handling of safety stock
@@ -139,21 +139,6 @@ class SS_Mngmt_Env(Env):
     def step(self, action):
         # Returns the next state, reward and whether the episode is done
 
-        # Orders are delivered from the order queues
-        for node in self.graph.nodes:
-            # Get the index of the node
-            node_index = self.node_to_index(node)
-
-            # Get the order from the order queue
-            order = self.order_queues[node].popleft()
-
-            # Add the order to the stock level
-            self.state[0][node_index] += order
-
-            # Add the order to the delivered list
-            self.delivery_history.append(order)
-
-
         # Retrieve the actual demand for the current timestep
         self.current_demand = self.actual_demands[self.EP_LENGTH - self.episode_length]
 
@@ -166,6 +151,16 @@ class SS_Mngmt_Env(Env):
 
                 # Get the index of the node
                 node_index = self.node_to_index(node)
+
+                # Orders are delivered from the order queues
+                # Get the order from the order queue
+                order = self.order_queues[node].popleft()
+
+                # Add the order to the stock level
+                self.state[0][node_index] += order
+
+                # Add the order to the delivered list
+                self.delivery_history.append(order)
 
                 # Process the backlog first
                 while self.backlog_queues[node] and self.state[0][node_index] > 0:
