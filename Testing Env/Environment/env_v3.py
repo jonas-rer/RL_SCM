@@ -108,8 +108,10 @@ class SS_Mngmt_Env(Env):
         for node in self.graph.nodes:
             initial_inventories.append(self.graph.nodes[node].get('I', 0))
 
-        # Convert the lists to a numpy array
-        self.state = np.array([initial_inventories] + [self.planned_demands])
+        initial_inventories = np.array(initial_inventories)   
+
+        # Now you can combine them
+        self.state = [initial_inventories, self.planned_demands]
 
         # TODO
         # Empty dataframe for plotting the history and analysis
@@ -360,24 +362,29 @@ class SS_Mngmt_Env(Env):
 
         # Genrates a random planned demand for each edge in the network
         # over the whole episode. The demand is drawn from a normal distribution
+        edges_leading_to_D = [edge for edge in self.graph.edges if edge[1] == 'D']
 
-        planned_demand = np.zeros((self.EP_LENGTH - 1, len(self.graph.edges)))
+        # Create the planned_demand array based on these edges
+        planned_demand = np.zeros((self.EP_LENGTH - 1, len(edges_leading_to_D)))
 
-        for edge in self.graph.edges:
-            planned_demand[:, edge] = np.random.normal(10, 2, self.EP_LENGTH - 1)
+        for i, edge in enumerate(self.graph.edges):
+            if edge[1] == 'D':
+                planned_demand[:, i] = np.random.normal(10, 2, self.EP_LENGTH - 1)
 
         return planned_demand
     
     def actual_demand(self, planned_demand):
 
-        # Genrate a random actual demand for each edge in the network
+        # Generate a random actual demand for each edge in the network
         # based on the planned demand from the current timestep. The demand
         # is drawn from a normal distribution
+        actual_demand = np.copy(planned_demand)
 
-        actual_demand = np.zeros(len(self.graph.edges))
-
-        for edge in self.graph.edges:
-            actual_demand[edge] = planned_demand[edge] + np.random.normal(0, 3)
+        for i in range(self.EP_LENGTH - 1):
+            for j in range(len(self.graph.edges)):
+                # Add a small random noise to the planned demand
+                noise = np.random.normal(0, 2)
+                actual_demand[i, j] += noise
 
         return actual_demand
 
