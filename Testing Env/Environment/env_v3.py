@@ -108,7 +108,7 @@ class SS_Mngmt_Env(Env):
         self.stock_history = []
         self.demand_history = []
         self.expected_demand_history = []
-        self.order_history = []
+        self.action_history = []
         self.delivery_history = []
 
         # Render mode
@@ -121,10 +121,14 @@ class SS_Mngmt_Env(Env):
         # Returns the next state, reward and whether the episode is done
 
         # Retrieve the actual demand for the current timestep
-        self.current_demand = self.actual_demands[self.EP_LENGTH - self.episode_length]
+        self.current_demand = self.actual_demands[self.EP_LENGTH - self.episode_length - 1]
 
         # Subtract the demand from the stock level of the corresponding nodes of the state
         # Leave the demand in the deque for the next timestep if the stock level is negative at first position
+
+        # Add every first element of the order queues to the history
+        orders = [self.order_queues[node][0] for node in self.graph.nodes if node not in ['S', 'D']]
+        self.delivery_history.append(orders)
 
         for node in self.graph.nodes:
             
@@ -140,15 +144,12 @@ class SS_Mngmt_Env(Env):
                 # Add the order to the stock level
                 self.state[0][node_index] += order
 
-                # Add the order to the delivered list
-                self.delivery_history.append(order)
-
                 # Process the backlog first
                 while self.backlog_queues[node] and self.state[0][node_index] > 0:
                     backlog_demand = self.backlog_queues[node][0]
                     if self.state[0][node_index] >= backlog_demand:
                         self.state[0][node_index] -= backlog_demand
-                        self.backlog_queues[node].pop(0)  # Remove the processed demand from the backlog
+                        self.backlog_queues[node].popleft()  # Remove the processed demand from the backlog
                     else:
                         break  # Not enough stock to fulfill the backlog, so break the loop
 
@@ -187,7 +188,8 @@ class SS_Mngmt_Env(Env):
         # Append the state to the history
         self.reward_history.append(self.reward)
         self.stock_history.append(self.state[0])
-        self.order_history.append(action)
+        self.action_history.append(action)
+        self.demand_history.append(self.current_demand)
 
         # Check if episode is done
         if self.episode_length <= 0: 
@@ -212,13 +214,36 @@ class SS_Mngmt_Env(Env):
 
     def render_human(self):
 
+        # current timestep
+        if self.episode_length == 0:
+            timestep = self.EP_LENGTH - 1
+        else:
+            timestep = self.EP_LENGTH - self.episode_length - 1
+
         # Print for every timestep the stock level, order, demand and reward
-        print(f"Stock Level: {self.state[0]}")
-        print(f"Order: {self.order_history[-1]}")
+        print()
+        print(f"Time Step: {timestep}")
+        print(f"Stock Level: {self.state[timestep]}")
+        print(f"Action: {self.order_history[timestep]}")
+        print(f"Demand: {self.demand_history[timestep]}")
+        print(f"Delivery: {self.delivery_history[timestep]}")
         print(f"Reward: {self.reward}")
+        print()
         
         return
     
+    def save_data(self, path):
+        # Save the data to a csv file
+        data = {
+            'Stock Level': self.stock_history,
+            'Order': self.order_history,
+            'Demand': self.demand_history,
+            'Reward': self.reward_history
+        }
+
+        df = pd.DataFrame(data)
+        df.to_csv(path, index=False)
+
     def setup_network(self, network_config = None):
         # Load the network configuration from a JSON string
         config = json.loads(network_config)
@@ -375,15 +400,10 @@ class SS_Mngmt_Env(Env):
 
         obs = np.copy(self.state)
 
-        # # Append history to the dataframe
-        # self.history['Stock Level'] = self.stock_history
-        # self.history['Order'] = self.stock_history
-        # self.history['Demand'] = self.demand_history
-
         # Reset the history
         self.reward_history = []
         self.stock_history = []
-        self.order_history = []
+        self.action_history = []
         self.demand_history = []
         self.expected_demand_history = []
         self.delivery_history = []
