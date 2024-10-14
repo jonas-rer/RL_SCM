@@ -13,7 +13,7 @@ def plot_data(df):
     nodes = df['Node'].unique()
 
     # Create a list of colors
-    colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
+    colors = ['b', 'g', 'c', 'm', 'y', 'k']
 
     # Create a figure with a subplot for each node and each variable
     fig, axs = plt.subplots(len(nodes), 4, figsize=(20, len(nodes)*5))
@@ -23,22 +23,29 @@ def plot_data(df):
         # Select the data for this node
         node_data = df[df['Node'] == node]
         
-        # Plot the 'Stock' over time for this node on its subplot
+        # Plot the 'Stock' over time
         axs[i, 0].bar(node_data['Time'], node_data['Stock'], label=node, color=colors[i % len(colors)])
 
         axs[i, 0].set_title(f'Stock over time for node {node}')
         
-        # Plot the 'Reward' over time for this node on its subplot
+        # Plot the 'Reward' over time
         axs[i, 1].plot(node_data['Time'], node_data['Reward'], label=node, color=colors[i % len(colors)])
         axs[i, 1].set_title(f'Reward over time for node {node}')
         
-        # Plot the 'Delivery' over time for this node on its subplot as a bar plot
+        # Plot the 'Delivery' over time
         axs[i, 2].bar(node_data['Time'], node_data['Delivery'], label=node, color=colors[i % len(colors)])
+
+        mean_delivery = node_data['Delivery'].mean()
+        axs[i, 2].axhline(mean_delivery, color='red', linestyle='--', label=f'Mean Delivery: {mean_delivery:.2f}')
+
         axs[i, 2].set_title(f'Delivery over time for node {node}')
         
-        # Plot the 'Demand' over time for this node on its subplot as a bar plot
+        # Plot the 'Demand' over time
         axs[i, 3].bar(node_data['Time'], node_data['Demand'], label=node, color=colors[i % len(colors)])
         axs[i, 3].set_title(f'Demand over time for node {node}')
+
+        mean_demand = node_data['Demand'].mean()
+        axs[i, 3].axhline(mean_demand, color='red', linestyle='--', label=f'Mean Demand: {mean_demand:.2f}')
 
     # Add more space between the plots
     plt.subplots_adjust(hspace=0.5)

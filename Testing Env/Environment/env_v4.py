@@ -19,7 +19,6 @@ from datetime import datetime
 from collections import deque
 
 # Import stable baselines
-# Probably not needed --> test ray lib instead
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import VecFrameStack, DummyVecEnv
 from stable_baselines3.common.evaluation import evaluate_policy
@@ -51,7 +50,7 @@ class SS_Mngmt_Env(Env):
 
         # Define the costs
         self.stockout_cost = 1000
-        self.order_cost = 50
+        self.order_cost = 200
         self.item_cost = 1
         self.stock_cost = 1
 
@@ -148,7 +147,7 @@ class SS_Mngmt_Env(Env):
         self.current_demand = self.actual_demands[timestep]
 
         # Add every first element of the order queues to the history
-        self.new_order = ((action + 1) / 2) * 20
+        self.new_order = ((action + 1) / 2) * 50
 
         self.orders = np.array([self.order_queues[node][0] for node in self.graph.nodes if node not in ['S', 'D']])
 
