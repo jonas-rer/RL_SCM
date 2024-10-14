@@ -224,6 +224,8 @@ class SS_Mngmt_Env(Env):
 
         # TODO Does it improve if state[1] the demand is updated with the actual demand for each step?
 
+        # TODO Check if the state is passed correctly
+
         # Check if episode is done
         if self.episode_length <= 0: 
             done = True
