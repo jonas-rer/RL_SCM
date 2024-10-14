@@ -46,9 +46,12 @@ class SS_Mngmt_Env(Env):
         self.graph = nx.DiGraph()
         self.setup_network(self.network_config)
 
+        # Number of nodes excluding 'S' and 'D'
+        num_nodes = len(self.graph.nodes) - 2
+
         # Define the costs
-        self.stockout_cost = 10
-        self.order_cost = 5
+        self.stockout_cost = 1000
+        self.order_cost = 50
         self.item_cost = 1
         self.stock_cost = 1
 
@@ -65,10 +68,6 @@ class SS_Mngmt_Env(Env):
         high = np.full(len(self.graph.nodes) - 2, 1)
         self.action_space = Box(low=low, high=high, dtype=np.float32)
 
-        # Define observation space
-        # Number of nodes including 'S' and 'D'
-        num_nodes = len(self.graph.nodes) - 2
-
         # Define the lower bounds for stock level and expected demand
         low_stock = np.full((1, num_nodes), -1)
         low_demand = np.full((self.EP_LENGTH, num_nodes), -1)
@@ -79,6 +78,7 @@ class SS_Mngmt_Env(Env):
         high_demand = np.full((self.EP_LENGTH, num_nodes), 1)
         high = np.concatenate([high_stock, high_demand]).flatten()
 
+        # Define the observation space
         self.observation_space = Box(low=low, high=high, dtype=np.float64)
 
         # Define the initial state
@@ -106,12 +106,12 @@ class SS_Mngmt_Env(Env):
             # Normalize inventories to the range [-1, 1]
             normalized_inventories = 2 * ((initial_inventories - self.inventory_min) / (self.inventory_max - self.inventory_min)) - 1
 
-        # Assuming planned demands have a fixed range [0, 100]
-        demand_min = 0
-        demand_max = 100
-        normalized_planned_demands = 2 * ((self.planned_demands - demand_min) / (demand_max - demand_min)) - 1
-
         normalized_inventories = normalized_inventories.reshape(1, -1)
+
+        # Normalizing the planned demands
+        demand_min = np.min(self.planned_demands)
+        demand_max = np.max(self.planned_demands)
+        normalized_planned_demands = 2 * ((self.planned_demands - demand_min) / (demand_max - demand_min)) - 1
 
         self.state = np.concatenate([normalized_inventories, normalized_planned_demands]).flatten()
 
@@ -148,10 +148,9 @@ class SS_Mngmt_Env(Env):
         self.current_demand = self.actual_demands[timestep]
 
         # Add every first element of the order queues to the history
-        self.new_order = ((action + 1) / 2) * 100
-        self.reward -= np.sum(self.order_cost * (self.new_order * self.item_cost))
+        self.new_order = ((action + 1) / 2) * 20
 
-        self.orders = [self.order_queues[node][0] for node in self.graph.nodes if node not in ['S', 'D']]
+        self.orders = np.array([self.order_queues[node][0] for node in self.graph.nodes if node not in ['S', 'D']])
 
         for node in self.graph.nodes:
             
@@ -159,6 +158,9 @@ class SS_Mngmt_Env(Env):
 
                 # Get the index of the node
                 node_index = self.node_to_index(node)
+
+                if self.new_order[node_index] > 0:
+                    self.reward -= self.order_cost + (self.new_order[node_index] * self.item_cost)
 
                 # Orders are delivered from the order queues
                 # Get the order from the order queue
@@ -209,8 +211,9 @@ class SS_Mngmt_Env(Env):
 
         normalized_inventories = normalized_inventories.reshape(1, -1)
 
-        demand_min = 0
-        demand_max = 100
+        # Normalizing the planned demands
+        demand_min = np.min(self.planned_demands)
+        demand_max = np.max(self.planned_demands)
         normalized_planned_demands = 2 * ((self.planned_demands - demand_min) / (demand_max - demand_min)) - 1
 
         # Update the state
@@ -245,11 +248,11 @@ class SS_Mngmt_Env(Env):
     def render_human(self):
 
         print(f"Episode Length: {self.EP_LENGTH - self.episode_length}")
-        print(f"Stock Level: {self.inventory}")
-        print(f"Planned Demand: {self.planned_demands[self.EP_LENGTH - self.episode_length - 1]}")
-        print(f"Actual Demand: {self.current_demand}")
-        print(f"Action: {self.new_order}")
-        print(f"Order: {self.orders}")
+        print(f"Stock Level: {self.inventory.round(1)}")
+        print(f"Planned Demand: {self.planned_demands[self.EP_LENGTH - self.episode_length - 1].round(1)}")
+        print(f"Actual Demand: {self.current_demand.round(1)}")
+        print(f"Action: {self.new_order.round(1)}")
+        print(f"Order: {self.orders.round(1)}")
         print(f"Reward: {self.reward}")
         print()
               
@@ -360,7 +363,7 @@ class SS_Mngmt_Env(Env):
             for j in range(self.EP_LENGTH):
                 # Introduce a probability of having demand
                 if np.random.rand() < 0.5:  # 50% chance of having demand
-                    planned_demand[j, i] = np.random.normal(10, 2)
+                    planned_demand[j, i] = np.random.normal(10, 3)
 
         # TODO make sure that the demand has the right shape
 
@@ -377,7 +380,7 @@ class SS_Mngmt_Env(Env):
             for j in range(actual_demand.shape[1]):
                 # Add a small random noise to the planned demand
                 if planned_demand[i, j] > 0:
-                    noise = np.random.normal(0, 5)
+                    noise = np.random.normal(0, 2)
                     # Ensure actual demand is not less than 0
                     actual_demand[i, j] = max(0, actual_demand[i, j] + noise)
 
@@ -461,12 +464,12 @@ class SS_Mngmt_Env(Env):
             # Normalize inventories to the range [-1, 1]
             normalized_inventories = 2 * ((initial_inventories - self.inventory_min) / (self.inventory_max - self.inventory_min)) - 1
 
-        # Assuming planned demands have a fixed range [0, 100]
-        demand_min = 0
-        demand_max = 100
-        normalized_planned_demands = 2 * ((self.planned_demands - demand_min) / (demand_max - demand_min)) - 1
-
         normalized_inventories = normalized_inventories.reshape(1, -1)
+
+        # Normalizing the planned demands
+        demand_min = np.min(self.planned_demands)
+        demand_max = np.max(self.planned_demands)
+        normalized_planned_demands = 2 * ((self.planned_demands - demand_min) / (demand_max - demand_min)) - 1
 
         # Update the state
         self.state = np.concatenate([normalized_inventories, normalized_planned_demands]).flatten()
