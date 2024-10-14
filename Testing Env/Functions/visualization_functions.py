@@ -24,7 +24,8 @@ def plot_data(df):
         node_data = df[df['Node'] == node]
         
         # Plot the 'Stock' over time for this node on its subplot
-        axs[i, 0].bar(node_data['Time'], node_data['Stock'].round(0), label=node, color=colors[i % len(colors)])
+        axs[i, 0].bar(node_data['Time'], node_data['Stock'], label=node, color=colors[i % len(colors)])
+
         axs[i, 0].set_title(f'Stock over time for node {node}')
         
         # Plot the 'Reward' over time for this node on its subplot

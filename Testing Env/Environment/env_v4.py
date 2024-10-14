@@ -115,9 +115,9 @@ class SS_Mngmt_Env(Env):
 
         self.state = np.concatenate([normalized_inventories, normalized_planned_demands]).flatten()
 
-        # To save the data
+        # Prep to save the data
         self.inventory = initial_inventories
-        self.stock_history = [self.inventory]
+        self.stock_history = self.inventory.tolist()
         self.action_history = [np.zeros(num_nodes)]
         self.demand_history = [np.zeros(num_nodes)]
         self.delivery_history = [np.zeros(num_nodes)]
@@ -149,6 +149,8 @@ class SS_Mngmt_Env(Env):
 
         # Add every first element of the order queues to the history
         self.new_order = ((action + 1) / 2) * 100
+        self.reward -= np.sum(self.order_cost * (self.new_order * self.item_cost))
+
         self.orders = [self.order_queues[node][0] for node in self.graph.nodes if node not in ['S', 'D']]
 
         for node in self.graph.nodes:
@@ -187,9 +189,6 @@ class SS_Mngmt_Env(Env):
                 # New orders can be placed and will be added to the deque (order_queues)
                 # Add the order to the order queue
                 self.order_queues[node].append(self.new_order[node_index])
-
-                # Compute the order cost
-                self.reward -= self.order_cost * (order * self.item_cost)
 
         # Compute the reward based on the order costs and stock level
         self.reward -= np.sum(inventory_levels * self.stock_cost)
@@ -273,8 +272,6 @@ class SS_Mngmt_Env(Env):
         # Initialize a list to store the data
         data = []
 
-        #TODO Add an addtional row for the initial stock level (other rows are shifted by one)
-
         # Loop over all time steps
         for t in range(len(self.stock_history)):
             # Loop over all nodes
@@ -294,7 +291,9 @@ class SS_Mngmt_Env(Env):
 
         # Convert the list of dictionaries to a pandas DataFrame
         df = pd.DataFrame(data)
-        df.to_csv(path, index=False)
+
+        if self.episode_length == 1:
+            df.to_csv(path, index=False)
 
     def setup_network(self, network_config = None):
         # Load the network configuration from a JSON string
@@ -476,7 +475,7 @@ class SS_Mngmt_Env(Env):
 
         # Resetting history data
         self.inventory = initial_inventories
-        self.stock_history = [self.inventory]
+        self.stock_history = self.inventory.tolist()
         self.action_history = [np.zeros(num_nodes)]
         self.demand_history = [np.zeros(num_nodes)]
         self.delivery_history = [np.zeros(num_nodes)]
