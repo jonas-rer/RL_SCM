@@ -24,7 +24,7 @@ def plot_data(df):
         node_data = df[df['Node'] == node]
         
         # Plot the 'Stock' over time for this node on its subplot
-        axs[i, 0].plot(node_data['Time'], node_data['Stock'], label=node, color=colors[i % len(colors)])
+        axs[i, 0].bar(node_data['Time'], node_data['Stock'].round(0), label=node, color=colors[i % len(colors)])
         axs[i, 0].set_title(f'Stock over time for node {node}')
         
         # Plot the 'Reward' over time for this node on its subplot
@@ -58,7 +58,7 @@ def plot_agg_data(df):
     fig, axs = plt.subplots(1, 4, figsize=(20, 5))
 
     # Plot the aggregated 'Stock' over time
-    axs[0].plot(agg_df['Time'], agg_df['Stock'], color='b')
+    axs[0].bar(agg_df['Time'], agg_df['Stock'], color='b')
     axs[0].set_title('Aggregated Stock over time')
 
     # Plot the aggregated 'Reward' over time
