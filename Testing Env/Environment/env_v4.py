@@ -392,11 +392,8 @@ class SS_Mngmt_Env(Env):
         self.graph = nx.DiGraph()
         self.setup_network(self.network_config)
 
-        # Order delay and queue
-        # Initialize an empty dictionary for the order queues
+        # Order delay and backlog queue
         self.order_queues = self.order_queue()
-
-        # Backlog queue for each node
         self.backlog_queues = self.backlog_queue()
 
         # Define the initial state
@@ -417,6 +414,7 @@ class SS_Mngmt_Env(Env):
 
         obs = np.copy(self.state)
 
+        # Resetting history data
         self.stock_history = []
         self.action_history = []
         self.demand_history = []
