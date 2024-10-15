@@ -37,9 +37,6 @@ class SS_Mngmt_Env(Env):
         self.EP_LENGTH = EP_LENGTH # Total length
         self.episode_length = EP_LENGTH # Current length of the episode
 
-        # Initialize the reward
-        self.reward = 0
-
         # Seting up the network
         self.network_config = network_config
         self.graph = nx.DiGraph()
@@ -49,11 +46,11 @@ class SS_Mngmt_Env(Env):
         num_nodes = len(self.graph.nodes) - 2
 
         # Define the costs
-        self.stockout_cost = 1
-        self.order_cost = 10
-        self.item_cost = 1
-        self.stock_cost = 2
-        self.item_prize = 2
+        self.stockout_cost = 10
+        self.order_cost = 5
+        self.item_cost = 0.1
+        self.stock_cost = 0.5
+        self.item_prize = 1
 
         # Order delay and queue
         self.order_queues = self.order_queue()
@@ -135,6 +132,8 @@ class SS_Mngmt_Env(Env):
 
         num_nodes = len(self.graph.nodes) - 2
 
+        reward = 0
+
         # Retrieving inventory levels
         inventory_levels = self.state[:num_nodes]
 
@@ -160,7 +159,7 @@ class SS_Mngmt_Env(Env):
                 node_index = self.node_to_index(node)
 
                 if self.new_order[node_index] > 0:
-                    self.reward -= self.order_cost + (self.new_order[node_index] * self.item_cost)
+                    reward -= self.order_cost + (self.new_order[node_index] * self.item_cost)
 
                 # Orders are delivered from the order queues
                 # Get the order from the order queue
@@ -174,7 +173,7 @@ class SS_Mngmt_Env(Env):
                     backlog_demand = self.backlog_queues[node][0]
                     if inventory_levels[node_index] >= backlog_demand:
                         inventory_levels[node_index] -= backlog_demand
-                        self.reward += backlog_demand * self.item_prize # Reward for fulfilling the backlog
+                        reward += backlog_demand * self.item_prize # Reward for fulfilling the backlog
                         self.backlog_queues[node].popleft()  # Remove the processed demand from the backlog
                     else:
                         break  # Not enough stock to fulfill the backlog, so break the loop
@@ -182,20 +181,20 @@ class SS_Mngmt_Env(Env):
                 # If there's still stock left after processing the backlog, process the current demand
                 if inventory_levels[node_index] >= self.current_demand[node_index]:
                     inventory_levels[node_index] -= self.current_demand[node_index]
-                    self.reward += self.current_demand[node_index] * self.item_prize  # Reward for fulfilling the demand
+                    reward += self.current_demand[node_index] * self.item_prize  # Reward for fulfilling the demand
                 else:
                     # Add the demand to the backlog queue
                     self.backlog_queues[node].append(self.current_demand[node_index])
 
                     # Penalty for stockout
-                    self.reward -= self.stockout_cost
+                    reward -= self.stockout_cost
 
                 # New orders can be placed and will be added to the deque (order_queues)
                 # Add the order to the order queue
                 self.order_queues[node].append(self.new_order[node_index])
 
         # Compute the reward based on the order costs and stock level
-        self.reward -= np.sum(inventory_levels * self.stock_cost)
+        reward -= np.sum(inventory_levels * self.stock_cost)
 
         # Check if the episode is done
         done = self.episode_length == 0
@@ -224,6 +223,8 @@ class SS_Mngmt_Env(Env):
         # Update the observation space
         obs = np.copy(self.state)
 
+        self.reward_history.append(reward)
+
         # TODO Does it improve if state[1] the demand is updated with the actual demand for each step?
 
         # TODO Check if the state is passed correctly
@@ -240,7 +241,7 @@ class SS_Mngmt_Env(Env):
         # Check if the episode is truncated
         truncated = False
 
-        return obs, float(self.reward), done, truncated, info
+        return obs, float(reward), done, truncated, info
 
     def render(self):
         # Just check episode lenghth and only plot the last one when using matplotlib          
@@ -257,14 +258,13 @@ class SS_Mngmt_Env(Env):
         print(f"Actual Demand: {self.current_demand.round(1)}")
         print(f"Action: {self.new_order.round(1)}")
         print(f"Order: {self.orders.round(1)}")
-        print(f"Reward: {self.reward}")
+        print(f"Reward: {self.reward_history[self.EP_LENGTH - self.episode_length - 1]}")
         print()
               
         self.stock_history.append(list(self.inventory))
         self.demand_history.append(self.current_demand)
         self.action_history.append(self.new_order)
         self.delivery_history.append(self.orders)
-        self.reward_history.append(self.reward)
 
         # Save the data
         now = datetime.now()
@@ -430,8 +430,6 @@ class SS_Mngmt_Env(Env):
 
         # Reset the episode length
         self.episode_length = self.EP_LENGTH
-
-        self.reward = 0
 
         # Reset the network
         self.graph = nx.DiGraph()
