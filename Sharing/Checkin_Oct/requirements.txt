@@ -1,0 +1,9 @@
+gymnasium
+networkx
+numpy
+pandas
+json
+matplotlib
+seaborn
+stable-baselines3
+pygraphviz
