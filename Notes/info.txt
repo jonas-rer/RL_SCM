@@ -1,4 +1,0 @@
-The jupyter notebooks and come from the youtube course by Nicholas Renotte.
-
-Here the link to the online course:
-https://www.youtube.com/watch?v=Mut_u40Sqz4&list=WL&index=6
