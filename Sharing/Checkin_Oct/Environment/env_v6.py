@@ -30,7 +30,17 @@ class SS_Mngmt_Env(Env):
     metadata = {"render_modes": ["human"], "render_fps": 4}
     
     # Define the action and observation space
-    def __init__(self, EP_LENGTH = 30, network_config = None, render_mode = None):
+    def __init__(
+                self, 
+                EP_LENGTH = 52, 
+                network_config = None,
+                render_mode = None,
+                stockout_cost = 1000,
+                order_cost = 5,
+                item_cost = 0.1,
+                stock_cost = 0.5,
+                item_prize = 20,
+                order_quantities = [0, 15, 50]):
 
         self.EP_LENGTH = EP_LENGTH # Total length
         self.episode_length = EP_LENGTH # Current length of the episode
@@ -44,13 +54,13 @@ class SS_Mngmt_Env(Env):
         num_nodes = len(self.graph.nodes) - 2
 
         # Define the costs
-        self.stockout_cost = 1000
-        self.order_cost = 5
-        self.item_cost = 0.1
-        self.stock_cost = 0.5
-        self.item_prize = 20
+        self.stockout_cost = stockout_cost
+        self.order_cost = order_cost
+        self.item_cost = item_cost
+        self.stock_cost = stock_cost
+        self.item_prize = item_prize
 
-        self.order_quantities = [0, 15, 50]
+        self.order_quantities = order_quantities
 
         # Order delay and queue
         self.order_queues = self.order_queue()
