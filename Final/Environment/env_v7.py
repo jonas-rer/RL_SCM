@@ -216,6 +216,11 @@ class SS_Mngmt_Env(Env):
 
         self.reward_history.append(reward)
 
+        self.stock_history.append(self.inventory[0])
+        self.demand_history.append(self.current_demand)
+        self.action_history.append(self.new_order)
+        self.delivery_history.append(self.orders)
+
         # TODO Check if the state is passed correctly
 
         # Check if episode is done
@@ -266,17 +271,6 @@ class SS_Mngmt_Env(Env):
             print("Order Queue:")
             pprint(self.order_queues, indent=4)
             print()
-
-            self.stock_history.append(self.inventory[0])
-            self.demand_history.append(self.current_demand)
-            self.action_history.append(self.new_order)
-            self.delivery_history.append(self.orders)
-
-            # Save the data
-            now = datetime.now()
-            path = f'./Data/{now.strftime("%Y-%m-%d_%H")}_last_environment_data_{self.model_type}.csv'
-
-            self.save_data(path)
 
         except Exception as e:
             print()
@@ -438,6 +432,12 @@ class SS_Mngmt_Env(Env):
 
     def reset(self, seed=None):
         # Reset the state of the environment back to an initial state
+
+        # Save the data
+        now = datetime.now()
+        path = f'./Data/{now.strftime("%Y-%m-%d")}_last_environment_data_{self.model_type}.csv'
+
+        self.save_data(path)
 
         super().reset(seed=seed)  # Reset the seed
         if seed is not None:

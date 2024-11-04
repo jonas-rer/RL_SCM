@@ -1,26 +1,29 @@
-# %%
+import os
 import numpy as np
 import tensorflow as tf
-from keras import layers, models
+from tensorflow.keras import layers, models
 import random
 from collections import deque
 
-# %%
 
+def create_q_network(state_size, action_sizes, learning_rate=0.001):
+    # Use Keras functional API for multi-output model
+    inputs = layers.Input(shape=(state_size,))
+    common_layer = layers.Dense(64, activation="relu")(inputs)
+    common_layer = layers.Dense(64, activation="relu")(common_layer)
 
-# Define the Q-network
-def create_q_network(state_size, action_size, learning_rate=0.001):
-    model = models.Sequential()
-    model.add(layers.Dense(64, activation="relu", input_shape=(state_size,)))
-    model.add(layers.Dense(64, activation="relu"))
-    model.add(layers.Dense(action_size, activation="linear"))
+    # Create a separate output for each discrete action component
+    outputs = [
+        layers.Dense(action_size, activation="linear")(common_layer)
+        for action_size in action_sizes
+    ]
+    model = models.Model(inputs=inputs, outputs=outputs)
     model.compile(
         optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate), loss="mse"
     )
     return model
 
 
-# Deep Q-learning with experience replay
 def deep_q_learning(
     env,
     num_episodes,
@@ -33,16 +36,15 @@ def deep_q_learning(
     exploration_decay_rate,
     batch_size=64,
     memory_size=10000,
+    model_save_path="q_network_model",
 ):
     state_size = env.observation_space.shape[0]  # For continuous state spaces
-    action_size = env.action_space.n
+    action_sizes = env.action_space.nvec
 
-    # Initialize Q-network
-    q_network = create_q_network(state_size, action_size, learning_rate)
-
-    # Replay memory
+    q_network = create_q_network(state_size, action_sizes, learning_rate)
     memory = deque(maxlen=memory_size)
     rewards_all_episodes = []
+    exploration_rates = []
 
     for episode in range(num_episodes):
         state = env.reset()
@@ -57,9 +59,14 @@ def deep_q_learning(
             # Exploration-exploitation trade-off
             exploration_rate_threshold = np.random.uniform(0, 1)
             if exploration_rate_threshold > exploration_rate:
-                action = np.argmax(q_network.predict(state))  # Exploitation
+                q_values = q_network.predict(state)
+                action = [
+                    np.argmax(q) for q in q_values
+                ]  # Choose the best action for each part
             else:
-                action = env.action_space.sample()  # Exploration
+                action = [
+                    np.random.choice(action_size) for action_size in action_sizes
+                ]  # Random action for each part
 
             # Take action and observe the new state and reward
             new_state, reward, done, *_ = env.step(action)
@@ -86,12 +93,19 @@ def deep_q_learning(
                 q_values_next = q_network.predict(next_states)
 
                 # Compute target Q-values
-                targets = q_values.copy()
+                targets = [q.copy() for q in q_values]
                 for i in range(batch_size):
-                    target_q_value = rewards[i]
-                    if not dones[i]:
-                        target_q_value += discount_rate * np.max(q_values_next[i])
-                    targets[i, actions[i]] = target_q_value
+                    for j in range(
+                        len(action_sizes)
+                    ):  # Iterate over each component in MultiDiscrete space
+                        target_q_value = rewards[i]
+                        if not dones[i]:
+                            target_q_value += discount_rate * np.max(
+                                q_values_next[j][i]
+                            )
+                        targets[j][
+                            i, actions[i][j]
+                        ] = target_q_value  # Update the specific component
 
                 # Train the Q-network on the batch
                 q_network.fit(states, targets, epochs=1, verbose=0)
@@ -104,9 +118,23 @@ def deep_q_learning(
             max_exploration_rate - min_exploration_rate
         ) * np.exp(-exploration_decay_rate * episode)
 
+        # Append metrics
         rewards_all_episodes.append(rewards_current_episode)
+        exploration_rates.append(exploration_rate)
 
-    return rewards_all_episodes, q_network
+        # Print progress every 10 episodes
+        if (episode + 1) % 10 == 0:
+            average_reward = np.mean(rewards_all_episodes[-10:])
+            print(
+                f"Episode: {episode + 1}, "
+                f"Reward: {rewards_current_episode}, "
+                f"Average Reward (last 10): {average_reward:.2f}, "
+                f"Exploration Rate: {exploration_rate:.4f}"
+            )
 
+    # Save the trained model
+    if not os.path.exists(model_save_path):
+        os.makedirs(model_save_path)
+    q_network.save(os.path.join(model_save_path, "q_network.h5"))
 
-# %%
+    return rewards_all_episodes, exploration_rates, q_network
