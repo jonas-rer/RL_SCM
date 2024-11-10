@@ -128,7 +128,7 @@ class SS_Mngmt_Env(Env):
         self.demand_history = [np.zeros(num_nodes)]
         self.delivery_history = [np.zeros(num_nodes)]
         self.backlog_history = [[False, False, False]]
-        self.reward_history = [0]
+        self.reward_history = [0, 0]
 
         # Render mode
         self.render_mode = render_mode
@@ -145,17 +145,13 @@ class SS_Mngmt_Env(Env):
         # Retrieve the current inventory levels
         self.inventory = self.state[:num_nodes]
         inventory_levels = np.copy(self.inventory)
-
         reward = 0
 
         # Retrieve the actual demand for the current timestep
         self.current_demand = self.actual_demands[timestep]
 
         # Add every first element of the order queues to the history
-        self.new_order = []
-
-        for i in action:
-            self.new_order.append(self.order_quantities[i])
+        self.new_order = [self.order_quantities[i] for i in action]
 
         # For visualization and history data
         self.orders = np.array(
@@ -168,51 +164,46 @@ class SS_Mngmt_Env(Env):
 
         # Process the orders and update the inventory levels for each node
         for node in self.graph.nodes:
-
             if node not in ["S", "D"]:
-
-                # Get the index of the node
                 node_index = self.node_to_index(node)
 
-                # Calculate the reward for the current node based on the new order
+                # Deduct costs for placing new orders
                 if self.new_order[node_index] > 0:
                     reward -= self.order_cost + (
                         self.new_order[node_index] * self.item_cost
                     )
 
-                # Get the order from the order queue, add it to stock level
+                # Fulfill orders from the queue
                 order = self.order_queues[node].popleft()
                 inventory_levels[node_index] += order
 
-                # If there's still stock left after processing the backlog, process the current demand
+                # Attempt to meet current demand
                 node_demand = self.current_demand[node_index]
                 if inventory_levels[node_index] >= node_demand:
+                    # Enough stock to meet demand
                     inventory_levels[node_index] -= node_demand
-                    reward += (
-                        node_demand * self.item_prize
-                    )  # Reward for fulfilling the demand
+                    reward += node_demand * self.item_prize
                 else:
-                    # Add the demand to the backlog queue
-                    self.backlog_queues[node].append(node_demand)
+                    # Insufficient stock - add unmet demand to backlog and apply penalty
+                    unmet_demand = node_demand - inventory_levels[node_index]
+                    inventory_levels[node_index] = (
+                        0  # Set stock to zero after fulfilling what we can
+                    )
+                    reward += (node_demand - unmet_demand) * self.item_prize
+                    reward -= self.stockout_cost * unmet_demand  # Apply stockout cost
+                    self.backlog_queues[node].append(unmet_demand)
 
-                    # Penalty for stockout
-                    reward -= self.stockout_cost
-
-                # Process the backlog
+                # Process backlog with any remaining stock
                 while self.backlog_queues[node] and inventory_levels[node_index] > 0:
                     backlog_demand = self.backlog_queues[node][0]
                     if inventory_levels[node_index] >= backlog_demand:
                         inventory_levels[node_index] -= backlog_demand
-                        reward += (
-                            backlog_demand * self.item_prize
-                        )  # Reward for fulfilling the backlog
-                        self.backlog_queues[
-                            node
-                        ].popleft()  # Remove the processed demand from the backlog
+                        reward += backlog_demand * self.item_prize
+                        self.backlog_queues[node].popleft()
                     else:
-                        break  # Not enough stock to fulfill the backlog, so break the loop
+                        break  # Not enough stock to clear the backlog completely
 
-                # Add the order to the order queue
+                # Replenish order queue
                 self.order_queues[node].append(self.new_order[node_index])
 
         # Compute the reward based on the order costs and stock level
@@ -256,7 +247,14 @@ class SS_Mngmt_Env(Env):
 
     def render_human(self):
 
+        print("\nEpisode Information")
         print(f"Episode Length: {self.EP_LENGTH - self.episode_length}")
+        if len(self.stock_history) > 1:
+            print(f"Stock Level (Previous Timestep): {self.stock_history[-2]}")
+        else:
+            print(
+                "Stock Level (Previous Timestep): No previous timestep data available"
+            )
         print(f"Stock Level: {self.inventory}")
         print(
             f"Planned Demand: {self.planned_demands[self.EP_LENGTH - self.episode_length - 1]}"
@@ -269,6 +267,7 @@ class SS_Mngmt_Env(Env):
         )
         print()
         print("Backlog:")
+        print([len(queue) > 0 for queue in self.backlog_queues.values()])
         pprint(self.backlog_queues, indent=4)
 
         print("Order Queue:")
@@ -490,7 +489,7 @@ class SS_Mngmt_Env(Env):
         self.demand_history = [np.zeros(num_nodes)]
         self.delivery_history = [np.zeros(num_nodes)]
         self.backlog_history = [[False, False, False]]
-        self.reward_history = [0]
+        self.reward_history = [0, 0]
 
         # Placeholder for info
         info = {}
