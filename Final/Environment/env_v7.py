@@ -35,6 +35,7 @@ class SS_Mngmt_Env(Env):
         EP_LENGTH=52,
         network_config=None,
         render_mode=None,
+        model_type=None,
         stockout_cost=1000,  # Cost of stockout
         order_cost=5,  # Cost of each order
         item_cost=0.1,  # Cost of each item
@@ -50,6 +51,8 @@ class SS_Mngmt_Env(Env):
 
         self.EP_LENGTH = EP_LENGTH  # Total length
         self.episode_length = EP_LENGTH  # Current length of the episode
+
+        self.model_type = model_type
 
         # Seting up the network
         self.network_config = network_config
@@ -124,6 +127,7 @@ class SS_Mngmt_Env(Env):
         self.action_history = [np.zeros(num_nodes)]
         self.demand_history = [np.zeros(num_nodes)]
         self.delivery_history = [np.zeros(num_nodes)]
+        self.backlog_history = [[False, False, False]]
         self.reward_history = [0]
 
         # Render mode
@@ -252,40 +256,38 @@ class SS_Mngmt_Env(Env):
 
     def render_human(self):
 
-        try:
+        print(f"Episode Length: {self.EP_LENGTH - self.episode_length}")
+        print(f"Stock Level: {self.inventory}")
+        print(
+            f"Planned Demand: {self.planned_demands[self.EP_LENGTH - self.episode_length - 1]}"
+        )
+        print(f"Actual Demand: {self.current_demand}")
+        print(f"Action: {self.new_order}")
+        print(f"Order: {self.orders}")
+        print(
+            f"Reward: {self.reward_history[self.EP_LENGTH - self.episode_length - 1]}"
+        )
+        print()
+        print("Backlog:")
+        pprint(self.backlog_queues, indent=4)
 
-            print(f"Episode Length: {self.EP_LENGTH - self.episode_length}")
-            print(f"Stock Level: {self.inventory}")
-            print(
-                f"Planned Demand: {self.planned_demands[self.EP_LENGTH - self.episode_length - 1]}"
-            )
-            print(f"Actual Demand: {self.current_demand}")
-            print(f"Action: {self.new_order}")
-            print(f"Order: {self.orders}")
-            print(
-                f"Reward: {self.reward_history[self.EP_LENGTH - self.episode_length - 1]}"
-            )
-            print()
-            print("Backlog:")
-            pprint(self.backlog_queues, indent=4)
+        print("Order Queue:")
+        pprint(self.order_queues, indent=4)
+        print()
 
-            print("Order Queue:")
-            pprint(self.order_queues, indent=4)
-            print()
+        self.stock_history.append(self.inventory[0])
+        self.demand_history.append(self.current_demand)
+        self.action_history.append(self.new_order)
+        self.delivery_history.append(self.orders)
+        self.backlog_history.append(
+            [len(queue) > 0 for queue in self.backlog_queues.values()]
+        )
 
-            self.stock_history.append(self.inventory[0])
-            self.demand_history.append(self.current_demand)
-            self.action_history.append(self.new_order)
-            self.delivery_history.append(self.orders)
+        # Save the data
+        now = datetime.now()
+        path = f'./Data/{now.strftime("%Y-%m-%d_%H")}_last_environment_data_{self.model_type}.csv'
 
-            # Save the data
-            now = datetime.now()
-            path = f'./Data/{now.strftime("%Y-%m-%d_%H")}_last_environment_data.csv'
-
-            self.save_data(path)
-
-        except Exception as e:
-            print()
+        self.save_data(path)
 
         return
 
@@ -304,6 +306,7 @@ class SS_Mngmt_Env(Env):
                     "Demand": self.demand_history[t][n],
                     "Delivery": self.delivery_history[t][n],
                     "Reward": self.reward_history[t],
+                    "Backlog": self.backlog_history[t][n],
                 }
                 data.append(row)
 
@@ -323,6 +326,12 @@ class SS_Mngmt_Env(Env):
         # Add edges to the graph with lead times
         for edge in config["edges"]:
             self.graph.add_edge(edge["source"], edge["target"], L=edge["L"])
+
+    def setup_costs(self, cost_config=None):
+        # TODO
+        # Load the cost configuration from a JSON string
+        # Placeholder for now
+        return 0
 
     def render_network(self):
         # Render the network using networkx
@@ -442,7 +451,7 @@ class SS_Mngmt_Env(Env):
         num_nodes = len(self.graph.nodes) - 2
 
         # Order delay and backlog queue
-        self.order_queues = self.order_queue()
+        self.order_queues = self.order_queue(initial_order=self.order_quantities[1])
         self.backlog_queues = self.backlog_queue()
 
         # Define the initial state
@@ -474,6 +483,7 @@ class SS_Mngmt_Env(Env):
         self.action_history = [np.zeros(num_nodes)]
         self.demand_history = [np.zeros(num_nodes)]
         self.delivery_history = [np.zeros(num_nodes)]
+        self.backlog_history = [0]
         self.reward_history = [0]
 
         # Placeholder for info
