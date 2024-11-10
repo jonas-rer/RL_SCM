@@ -197,15 +197,16 @@ class SS_Mngmt_Env(Env):
                     # Enough stock to meet demand
                     inventory_levels[node_index] -= node_demand
                     reward += node_demand * self.item_prize
+                    self.backlog_ckeck = False
                 else:
                     # Insufficient stock - add unmet demand to backlog and apply penalty
                     unmet_demand = node_demand - inventory_levels[node_index]
                     inventory_levels[node_index] = (
                         0  # Set stock to zero after fulfilling what we can
                     )
-                    print(f"Unmet demand at node {node} for {unmet_demand} units")
                     reward += (node_demand - unmet_demand) * self.item_prize
                     reward -= self.stockout_cost * unmet_demand  # Apply stockout cost
+                    self.check_backlog = True
                     self.backlog_queues[node].append(unmet_demand)
 
                 # Process backlog with any remaining stock
@@ -306,6 +307,9 @@ class SS_Mngmt_Env(Env):
         print("\nOrder Queue:")
         pprint(self.order_queues, indent=4)
         print()
+
+        print("Stockout Cost: ", self.stockout_cost)
+        print(self.check_backlog)
 
         # Save the data
         now = datetime.now()
