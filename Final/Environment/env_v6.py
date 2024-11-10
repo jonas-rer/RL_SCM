@@ -53,8 +53,8 @@ class SS_Mngmt_Env(Env):
         # Define the costs
         self.stockout_cost = 1000
         self.order_cost = 5
-        self.item_cost = 0.01
-        self.stock_cost = 0.05
+        self.item_cost = 0.1
+        self.stock_cost = 0.5
         self.item_prize = 20
 
         self.order_quantities = [0, 15, 50]

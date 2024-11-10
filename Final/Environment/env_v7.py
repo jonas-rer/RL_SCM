@@ -1,7 +1,7 @@
 # Gymnasium imports
-import gymnasium as gym
+import gymnasium as gym 
 from gymnasium import Env
-from gymnasium.spaces import Discrete, Box, Dict, Tuple, MultiBinary, MultiDiscrete
+from gymnasium.spaces import Discrete, Box, Dict, Tuple, MultiBinary, MultiDiscrete 
 
 import networkx as nx
 from networkx.drawing.nx_agraph import graphviz_layout
@@ -28,19 +28,22 @@ from stable_baselines3.common.evaluation import evaluate_policy
 class SS_Mngmt_Env(Env):
 
     metadata = {"render_modes": ["human"], "render_fps": 4}
-
+    
     # Define the action and observation space
     def __init__(
-        self, EP_LENGTH=30, network_config=None, render_mode=None, model_type=None
-    ):
+                self, 
+                EP_LENGTH = 52, 
+                network_config = None,
+                render_mode = None,
+                stockout_cost = 1000,
+                order_cost = 5,
+                item_cost = 0.1,
+                stock_cost = 0.5,
+                item_prize = 20,
+                order_quantities = [0, 15, 50]):
 
-        # To implement
-        # handling of safety stock
-
-        self.EP_LENGTH = EP_LENGTH  # Total length
-        self.episode_length = EP_LENGTH  # Current length of the episode
-
-        self.model_type = model_type
+        self.EP_LENGTH = EP_LENGTH # Total length
+        self.episode_length = EP_LENGTH # Current length of the episode
 
         # Seting up the network
         self.network_config = network_config
@@ -51,23 +54,21 @@ class SS_Mngmt_Env(Env):
         num_nodes = len(self.graph.nodes) - 2
 
         # Define the costs
-        self.stockout_cost = 1000
-        self.order_cost = 5
-        self.item_cost = 0.01
-        self.stock_cost = 0.05
-        self.item_prize = 20
+        self.stockout_cost = stockout_cost
+        self.order_cost = order_cost
+        self.item_cost = item_cost
+        self.stock_cost = stock_cost
+        self.item_prize = item_prize
 
-        self.order_quantities = [0, 15, 50]
+        self.order_quantities = order_quantities
 
         # Order delay and queue
         self.order_queues = self.order_queue()
 
         # Backlog queue for each node
         self.backlog_queues = self.backlog_queue()
-
+        
         # Define action space
-        # The action space is a box with dimensions equal to the number of nodes
-        # This represents the order amount for each node
         n_actions = 3
         n_nodes = len(self.graph.nodes) - 2
         action_choices = np.full(n_nodes, n_actions)
@@ -93,18 +94,13 @@ class SS_Mngmt_Env(Env):
         # Collect initial inventories from the graph
         initial_inventories = []
         for node in self.graph.nodes:
-            if node not in ["S", "D"]:
-                initial_inventories.append(self.graph.nodes[node].get("I", 0))
+            if node not in ['S', 'D']:
+                initial_inventories.append(self.graph.nodes[node].get('I', 0))
 
-        # Convert to numpy array
         initial_inventories = np.array(initial_inventories)
-        initial_inventories = initial_inventories.reshape(
-            1, initial_inventories.shape[0]
-        )
+        initial_inventories = initial_inventories.reshape(1, initial_inventories.shape[0])
 
-        self.state = np.concatenate(
-            [initial_inventories, self.planned_demands]
-        ).flatten()
+        self.state = np.concatenate([initial_inventories, self.planned_demands]).flatten()
 
         # Prep to save the data
         self.inventory = initial_inventories
@@ -118,8 +114,10 @@ class SS_Mngmt_Env(Env):
         self.render_mode = render_mode
         self.screen_initialized = False
 
+
     # Defining the step function
     def step(self, action):
+
         # Returns the next state, reward and whether the episode is done
         timestep = self.EP_LENGTH - self.episode_length
 
@@ -140,27 +138,19 @@ class SS_Mngmt_Env(Env):
         for i in action:
             self.new_order.append(self.order_quantities[i])
 
-        # Visualization and history data
-        self.orders = np.array(
-            [
-                self.order_queues[node][0]
-                for node in self.graph.nodes
-                if node not in ["S", "D"]
-            ]
-        )
+        # For visualization and history data
+        self.orders = np.array([self.order_queues[node][0] for node in self.graph.nodes if node not in ['S', 'D']])
 
         # Process the orders and update the inventory levels for each node
         for node in self.graph.nodes:
-
-            if node not in ["S", "D"]:
+            
+            if node not in ['S', 'D']:
 
                 # Get the index of the node
                 node_index = self.node_to_index(node)
 
                 if self.new_order[node_index] > 0:
-                    reward -= self.order_cost + (
-                        self.new_order[node_index] * self.item_cost
-                    )
+                    reward -= self.order_cost + (self.new_order[node_index] * self.item_cost)
 
                 # Get the order from the order queue, add it to stock level
                 order = self.order_queues[node].popleft()
@@ -170,9 +160,7 @@ class SS_Mngmt_Env(Env):
                 node_demand = self.current_demand[node_index]
                 if inventory_levels[node_index] >= node_demand:
                     inventory_levels[node_index] -= node_demand
-                    reward += (
-                        node_demand * self.item_prize
-                    )  # Reward for fulfilling the demand
+                    reward += node_demand * self.item_prize  # Reward for fulfilling the demand
                 else:
                     # Add the demand to the backlog queue
                     self.backlog_queues[node].append(node_demand)
@@ -185,12 +173,8 @@ class SS_Mngmt_Env(Env):
                     backlog_demand = self.backlog_queues[node][0]
                     if inventory_levels[node_index] >= backlog_demand:
                         inventory_levels[node_index] -= backlog_demand
-                        reward += (
-                            backlog_demand * self.item_prize
-                        )  # Reward for fulfilling the backlog
-                        self.backlog_queues[
-                            node
-                        ].popleft()  # Remove the processed demand from the backlog
+                        reward += backlog_demand * self.item_prize # Reward for fulfilling the backlog
+                        self.backlog_queues[node].popleft()  # Remove the processed demand from the backlog
                     else:
                         break  # Not enough stock to fulfill the backlog, so break the loop
 
@@ -216,15 +200,8 @@ class SS_Mngmt_Env(Env):
 
         self.reward_history.append(reward)
 
-        self.stock_history.append(self.inventory[0])
-        self.demand_history.append(self.current_demand)
-        self.action_history.append(self.new_order)
-        self.delivery_history.append(self.orders)
-
-        # TODO Check if the state is passed correctly
-
         # Check if episode is done
-        if self.episode_length <= 0:
+        if self.episode_length <= 0: 
             done = True
         else:
             done = False
@@ -235,19 +212,13 @@ class SS_Mngmt_Env(Env):
         # Check if the episode is truncated
         truncated = False
 
-        # assert self.observation_space.contains(obs), f"Observation {obs} is not contained in the observation space"
-        # assert self.action_space.contains(action), f"Action {action} is not contained in the action space"
-        # assert np.all(np.isfinite(obs)), "Observation contains NaN or infinity!"
-        # assert np.isfinite(reward), "Reward contains NaN or infinity!"
-
         return obs, float(reward), done, truncated, info
 
     def render(self):
-        # Just check episode lenghth and only plot the last one when using matplotlib
+        # Just check episode lenghth and only plot the last one when using matplotlib          
         if self.render_mode is not None:
             if self.render_mode == "human":
                 self.render_human()
-                # self.render_pygame()
 
     def render_human(self):
 
@@ -255,15 +226,11 @@ class SS_Mngmt_Env(Env):
 
             print(f"Episode Length: {self.EP_LENGTH - self.episode_length}")
             print(f"Stock Level: {self.inventory}")
-            print(
-                f"Planned Demand: {self.planned_demands[self.EP_LENGTH - self.episode_length - 1]}"
-            )
+            print(f"Planned Demand: {self.planned_demands[self.EP_LENGTH - self.episode_length - 1]}")
             print(f"Actual Demand: {self.current_demand}")
             print(f"Action: {self.new_order}")
             print(f"Order: {self.orders}")
-            print(
-                f"Reward: {self.reward_history[self.EP_LENGTH - self.episode_length - 1]}"
-            )
+            print(f"Reward: {self.reward_history[self.EP_LENGTH - self.episode_length - 1]}")
             print()
             print("Backlog:")
             pprint(self.backlog_queues, indent=4)
@@ -271,91 +238,86 @@ class SS_Mngmt_Env(Env):
             print("Order Queue:")
             pprint(self.order_queues, indent=4)
             print()
+                
+            self.stock_history.append(self.inventory[0])
+            self.demand_history.append(self.current_demand)
+            self.action_history.append(self.new_order)
+            self.delivery_history.append(self.orders)
+
+            # Save the data
+            now = datetime.now()
+            path = f'./Data/{now.strftime("%Y-%m-%d_%H")}_last_environment_data.csv'
+            
+            self.save_data(path)
 
         except Exception as e:
             print()
 
         return
-
+    
     def save_data(self, path):
+        # Saves the episode data to a CSV file
 
-        # Initialize a list to store the data
         data = []
 
-        # Loop over all time steps
         for t in range(len(self.stock_history)):
-            # Loop over all nodes
             for n in range(len(self.stock_history[t])):
-                # Create a dictionary with the data for this node at this time step
                 row = {
-                    "Time": t + 1,
-                    "Node": self.get_node_name(n),
-                    "Stock": self.stock_history[t][n],
-                    "Action": self.action_history[t][n],
-                    "Demand": self.demand_history[t][n],
-                    "Delivery": self.delivery_history[t][n],
-                    "Reward": self.reward_history[t],
+                    'Time': t + 1,
+                    'Node': self.get_node_name(n),
+                    'Stock': self.stock_history[t][n],
+                    'Action': self.action_history[t][n],
+                    'Demand': self.demand_history[t][n],
+                    'Delivery': self.delivery_history[t][n],
+                    'Reward': self.reward_history[t]
                 }
-                # Append the dictionary to the list
                 data.append(row)
 
-        # Convert the list of dictionaries to a pandas DataFrame
         df = pd.DataFrame(data)
 
         if self.episode_length == 1:
             df.to_csv(path, index=False)
 
-    def setup_network(self, network_config=None):
+    def setup_network(self, network_config = None):
         # Load the network configuration from a JSON string
         config = json.loads(network_config)
 
         # Add nodes to the graph
-        for node, attributes in config["nodes"].items():
+        for node, attributes in config['nodes'].items():
             self.graph.add_node(node, **attributes)
 
         # Add edges to the graph with lead times
-        for edge in config["edges"]:
-            self.graph.add_edge(edge["source"], edge["target"], L=edge["L"])
+        for edge in config['edges']:
+            self.graph.add_edge(edge['source'], edge['target'], L=edge['L'])
 
     def render_network(self):
         # Render the network using networkx
-        # Print node attributes
+
         print("Node Attributes:")
         for node, attributes in self.graph.nodes(data=True):
             print(f"Node {node}: {attributes}")
 
-        # Define the hierarchical layout using graphviz's 'dot'
         pos = graphviz_layout(self.graph, prog="dot")
 
-        # Define the plot
         plt.figure(figsize=(8, 6))
 
-        # Draw the nodes
-        nx.draw_networkx_nodes(self.graph, pos, node_size=700, node_color="lightblue")
-
-        # Draw the edges
-        nx.draw_networkx_edges(
-            self.graph, pos, edgelist=self.graph.edges(), arrowstyle="->", arrowsize=20
-        )
-
-        # Draw the node labels
+        nx.draw_networkx_nodes(self.graph, pos, node_size=700, node_color='lightblue')
+        nx.draw_networkx_edges(self.graph, pos, edgelist=self.graph.edges(), arrowstyle='->', arrowsize=20)
         nx.draw_networkx_labels(self.graph, pos, font_size=12, font_family="sans-serif")
 
-        # Extract the edge labels (lead times) and draw them
-        edge_labels = nx.get_edge_attributes(self.graph, "L")
+        edge_labels = nx.get_edge_attributes(self.graph, 'L')
         nx.draw_networkx_edge_labels(self.graph, pos, edge_labels=edge_labels)
 
-        # Set plot title
         plt.title("Supply Chain Network Graph", fontsize=15)
 
         # Display the plot
-        plt.axis("off")  # Turn off the axis
+        plt.axis('off') 
         plt.show()
 
     def node_to_index(self, node):
         # Creates a mapping from node names to indices
         return list(self.graph.nodes).index(node)
-
+    
     def get_node_name(self, index):
         # Creates a mapping from indices to node names
         return list(self.graph.nodes)[index]
@@ -363,9 +325,8 @@ class SS_Mngmt_Env(Env):
     def planned_demand(self):
         # Generates a random planned demand for each edge in the network
         # over the whole episode. The demand is drawn from a normal distribution
-        edges_leading_to_D = [edge for edge in self.graph.edges if edge[1] == "D"]
+        edges_leading_to_D = [edge for edge in self.graph.edges if edge[1] == 'D']
 
-        # Create the planned_demand array based on these edges
         planned_demand = np.zeros((self.EP_LENGTH, len(edges_leading_to_D)))
 
         for i, edge in enumerate(edges_leading_to_D):
@@ -374,10 +335,8 @@ class SS_Mngmt_Env(Env):
                 if np.random.rand() < 0.5:  # 50% chance of having demand
                     planned_demand[j, i] = int(np.random.normal(10, 3))
 
-        # TODO make sure that the demand has the right shape
-
         return planned_demand
-
+    
     def actual_demand(self, planned_demand):
 
         # Generate a random actual demand for each edge in the network
@@ -394,52 +353,41 @@ class SS_Mngmt_Env(Env):
                     actual_demand[i, j] = int(max(0, actual_demand[i, j] + noise))
 
         return actual_demand
-
+    
     def order_queue(self):
         # Create a dictionary for the order queues
         order_queues = {}
 
         for node in self.graph.nodes:
 
-            if node not in ["S", "D"]:
+            if node not in ['S', 'D']:
                 in_edges = list(self.graph.in_edges(node, data=True))
 
                 if in_edges:
-                    lead_time = in_edges[0][2]["L"]
+                    lead_time = in_edges[0][2]['L']
                     order_queues[node] = deque(maxlen=lead_time)
 
                     order_queues[node].extend([0] * lead_time)
 
         return order_queues
-
+    
     def backlog_queue(self):
         # Create a dictionary for the backlog queues
         backlog_queues = {}
 
         for node in self.graph.nodes:
-            if node not in ["S", "D"]:
+            if node not in ['S', 'D']:
 
                 in_edges = list(self.graph.in_edges(node, data=True))
                 if in_edges:
                     backlog_queues[node] = deque()
 
         return backlog_queues
-
-    def normalize(value, min_value, max_value):
-        if max_value == min_value:
-            return 0.5  # If all values are the same, set it to the midpoint (0.5)
-        return (value - min_value) / (max_value - min_value)
-
-    def reset(self, seed=None):
+    
+    def reset(self, seed = None):
         # Reset the state of the environment back to an initial state
 
-        # Save the data
-        now = datetime.now()
-        path = f'./Data/{now.strftime("%Y-%m-%d")}_last_environment_data_{self.model_type}.csv'
-
-        self.save_data(path)
-
-        super().reset(seed=seed)  # Reset the seed
+        super().reset(seed = seed) # Reset the seed
         if seed is not None:
             random.seed(seed)
 
@@ -463,19 +411,15 @@ class SS_Mngmt_Env(Env):
         # Collect initial inventories from the graph
         initial_inventories = []
         for node in self.graph.nodes:
-            if node not in ["S", "D"]:
-                initial_inventories.append(self.graph.nodes[node].get("I", 0))
+            if node not in ['S', 'D']:
+                initial_inventories.append(self.graph.nodes[node].get('I', 0))
 
         # Convert to numpy array
         initial_inventories = np.array(initial_inventories)
-        initial_inventories = initial_inventories.reshape(
-            1, initial_inventories.shape[0]
-        )
+        initial_inventories = initial_inventories.reshape(1, initial_inventories.shape[0])
 
         # Update the state
-        self.state = np.concatenate(
-            [initial_inventories, self.planned_demands]
-        ).flatten()
+        self.state = np.concatenate([initial_inventories, self.planned_demands]).flatten()
 
         obs = np.copy(self.state)
 

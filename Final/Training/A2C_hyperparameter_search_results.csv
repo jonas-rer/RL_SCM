@@ -1,0 +1,13 @@
+learning_rate,gamma,num_envs,mean_reward,std_reward,model_path
+0.0001,0.95,4,-8982.2,11136.32203467554,Training/Models/A2C/A2C_lr0.0001_gamma0.95_envs4.zip
+0.0001,0.95,8,-11684.1,13059.86723477693,Training/Models/A2C/A2C_lr0.0001_gamma0.95_envs8.zip
+0.0001,0.99,4,-15106.35,5025.705423370932,Training/Models/A2C/A2C_lr0.0001_gamma0.99_envs4.zip
+0.0001,0.99,8,-14798.45,5351.881460991079,Training/Models/A2C/A2C_lr0.0001_gamma0.99_envs8.zip
+0.0003,0.95,4,7767.4,2456.776849858367,Training/Models/A2C/A2C_lr0.0003_gamma0.95_envs4.zip
+0.0003,0.95,8,1998.85,4550.184062485825,Training/Models/A2C/A2C_lr0.0003_gamma0.95_envs8.zip
+0.0003,0.99,4,6940.6,1730.163472045344,Training/Models/A2C/A2C_lr0.0003_gamma0.99_envs4.zip
+0.0003,0.99,8,-21903.25,7939.247597379742,Training/Models/A2C/A2C_lr0.0003_gamma0.99_envs8.zip
+0.0005,0.95,4,5435.7,3018.380892134059,Training/Models/A2C/A2C_lr0.0005_gamma0.95_envs4.zip
+0.0005,0.95,8,5438.1,2058.7424413947465,Training/Models/A2C/A2C_lr0.0005_gamma0.95_envs8.zip
+0.0005,0.99,4,-8359.2,2088.646872977814,Training/Models/A2C/A2C_lr0.0005_gamma0.99_envs4.zip
+0.0005,0.99,8,2945.85,5402.300306582373,Training/Models/A2C/A2C_lr0.0005_gamma0.99_envs8.zip
