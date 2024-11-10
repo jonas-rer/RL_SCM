@@ -83,18 +83,30 @@ class SS_Mngmt_Env(Env):
         action_choices = np.full(n_nodes, n_actions)
         self.action_space = MultiDiscrete(action_choices)
 
-        # Define the lower bounds for stock level and expected demand
-        low_stock = np.full((1, num_nodes), 0)
-        low_demand = np.full((self.EP_LENGTH, num_nodes), 0)
-        low = np.concatenate([low_stock, low_demand]).flatten()
+        # # Define the lower bounds for stock level and expected demand
+        # low_stock = np.full((1, num_nodes), 0)
+        # low_demand = np.full((self.EP_LENGTH, num_nodes), 0)
+        # low = np.concatenate([low_stock, low_demand]).flatten()
 
-        # Define the upper bounds for stock level and expected demand
-        high_stock = np.full((1, num_nodes), 1000)
-        high_demand = np.full((self.EP_LENGTH, num_nodes), 20)
-        high = np.concatenate([high_stock, high_demand]).flatten()
+        # # Define the upper bounds for stock level and expected demand
+        # high_stock = np.full((1, num_nodes), 1000)
+        # high_demand = np.full((self.EP_LENGTH, num_nodes), 20)
+        # high = np.concatenate([high_stock, high_demand]).flatten()
 
         # Define the observation space
-        self.observation_space = Box(low=low, high=high, dtype=np.float64)
+        self.observation_space = Dict(
+            {
+                "inventory_levels": Box(
+                    low=0, high=1000, shape=(num_nodes,), dtype=np.float32
+                ),
+                "planned_demand": Box(
+                    low=0, high=30, shape=(self.EP_LENGTH, num_nodes), dtype=np.float32
+                ),
+                "actual_demand": Box(
+                    low=0, high=30, shape=(num_nodes,), dtype=np.float32
+                ),
+            }
+        )
 
         # Setting up the initial state
         self.demand_mean = demand_mean
@@ -112,23 +124,25 @@ class SS_Mngmt_Env(Env):
             if node not in ["S", "D"]:
                 initial_inventories.append(self.graph.nodes[node].get("I", 0))
 
-        initial_inventories = np.array(initial_inventories)
-        initial_inventories = initial_inventories.reshape(
-            1, initial_inventories.shape[0]
-        )
+        initial_inventories = np.array(initial_inventories, dtype=np.float32).flatten()
+        # initial_inventories = initial_inventories.reshape(
+        #     1, initial_inventories.shape[0]
+        # )
 
-        self.state = np.concatenate(
-            [initial_inventories, self.planned_demands]
-        ).flatten()
+        self.state = {
+            "inventory_levels": initial_inventories.astype(np.float32),
+            "planned_demand": self.planned_demands,
+            "actual_demand": self.actual_demands,
+        }
 
         # Prep to save the data
         self.inventory = initial_inventories
-        self.stock_history = self.inventory.tolist()
+        self.stock_history = [self.inventory.tolist()]
         self.action_history = [np.zeros(num_nodes)]
         self.demand_history = [np.zeros(num_nodes)]
         self.delivery_history = [np.zeros(num_nodes)]
         self.backlog_history = [[False, False, False]]
-        self.reward_history = [0, 0]
+        self.reward_history = [np.sum(initial_inventories * self.stock_cost)]
 
         # Render mode
         self.render_mode = render_mode
@@ -143,12 +157,12 @@ class SS_Mngmt_Env(Env):
         num_nodes = len(self.graph.nodes) - 2
 
         # Retrieve the current inventory levels
-        self.inventory = self.state[:num_nodes]
+        self.inventory = self.state["inventory_levels"]
         inventory_levels = np.copy(self.inventory)
         reward = 0
 
         # Retrieve the actual demand for the current timestep
-        self.current_demand = self.actual_demands[timestep]
+        self.current_demand = self.actual_demands[timestep].astype(np.float32)
 
         # Add every first element of the order queues to the history
         self.new_order = [self.order_quantities[i] for i in action]
@@ -215,15 +229,32 @@ class SS_Mngmt_Env(Env):
         # Decrease the episode length
         self.episode_length -= 1
 
-        inventory_levels = inventory_levels.reshape(1, inventory_levels.shape[0])
+        inventory_levels = inventory_levels.flatten()
         self.inventory = inventory_levels
 
-        self.state = np.concatenate([self.inventory, self.actual_demands]).flatten()
+        # Update the state
+        self.state = {
+            "inventory_levels": inventory_levels.astype(np.float32),
+            "planned_demand": self.planned_demands,
+            "actual_demand": self.current_demand,
+        }
 
         # Update the observation space
-        obs = np.copy(self.state)
+        obs = {
+            "inventory_levels": self.inventory.astype(np.float32),
+            "planned_demand": self.planned_demands,
+            "actual_demand": self.current_demand,
+        }
 
+        # Update the history data
         self.reward_history.append(reward)
+        self.stock_history.append(list(self.inventory))
+        self.demand_history.append(self.current_demand)
+        self.action_history.append(self.new_order)
+        self.delivery_history.append(self.orders)
+        self.backlog_history.append(
+            [len(queue) > 0 for queue in self.backlog_queues.values()]
+        )
 
         # Check if episode is done
         if self.episode_length <= 0:
@@ -265,22 +296,15 @@ class SS_Mngmt_Env(Env):
         print(
             f"Reward: {self.reward_history[self.EP_LENGTH - self.episode_length - 1]}"
         )
-        print()
-        print("Backlog:")
+        print(f"Last element Reward: {self.reward_history[-1]}")
+
+        print("\nBacklog:")
         print([len(queue) > 0 for queue in self.backlog_queues.values()])
         pprint(self.backlog_queues, indent=4)
 
-        print("Order Queue:")
+        print("\nOrder Queue:")
         pprint(self.order_queues, indent=4)
         print()
-
-        self.stock_history.append(self.inventory[0])
-        self.demand_history.append(self.current_demand)
-        self.action_history.append(self.new_order)
-        self.delivery_history.append(self.orders)
-        self.backlog_history.append(
-            [len(queue) > 0 for queue in self.backlog_queues.values()]
-        )
 
         # Save the data
         now = datetime.now()
@@ -460,8 +484,11 @@ class SS_Mngmt_Env(Env):
         self.backlog_queues = self.backlog_queue()
 
         # Define the initial state
-        self.planned_demands = self.planned_demand()
-        self.actual_demands = self.actual_demand(self.planned_demands)
+        self.planned_demands = self.planned_demand().astype(np.float32)
+        self.actual_demands = self.actual_demand(self.planned_demands).astype(
+            np.float32
+        )
+        self.current_demand = self.actual_demands[0].astype(np.float32)
 
         # Collect initial inventories from the graph
         initial_inventories = []
@@ -470,26 +497,31 @@ class SS_Mngmt_Env(Env):
                 initial_inventories.append(self.graph.nodes[node].get("I", 0))
 
         # Convert to numpy array
-        initial_inventories = np.array(initial_inventories)
-        initial_inventories = initial_inventories.reshape(
-            1, initial_inventories.shape[0]
-        )
+        initial_inventories = np.array(initial_inventories, dtype=np.float32).flatten()
+        # initial_inventories = initial_inventories.reshape(
+        #     1, initial_inventories.shape[0]
+        # )
 
-        # Update the state
-        self.state = np.concatenate(
-            [initial_inventories, self.planned_demands]
-        ).flatten()
+        self.state = {
+            "inventory_levels": initial_inventories,
+            "planned_demand": self.planned_demands,
+            "actual_demand": self.current_demand,
+        }
 
-        obs = np.copy(self.state)
+        obs = {
+            "inventory_levels": initial_inventories,
+            "planned_demand": self.planned_demands,
+            "actual_demand": self.current_demand,
+        }
 
         # Resetting history data
         self.inventory = initial_inventories
-        self.stock_history = self.inventory.tolist()
+        self.stock_history = [self.inventory.tolist()]
         self.action_history = [np.zeros(num_nodes)]
         self.demand_history = [np.zeros(num_nodes)]
         self.delivery_history = [np.zeros(num_nodes)]
         self.backlog_history = [[False, False, False]]
-        self.reward_history = [0, 0]
+        self.reward_history = [np.sum(initial_inventories * self.stock_cost)]
 
         # Placeholder for info
         info = {}
