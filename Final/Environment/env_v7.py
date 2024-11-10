@@ -294,6 +294,12 @@ class SS_Mngmt_Env(Env):
     def save_data(self, path):
         # Saves the episode data to a CSV file
 
+        print(
+            f"Lengths - stock: {len(self.stock_history)}, action: {len(self.action_history)}, "
+            f"demand: {len(self.demand_history)}, delivery: {len(self.delivery_history)}, "
+            f"reward: {len(self.reward_history)}, backlog: {len(self.backlog_history)}"
+        )
+
         data = []
 
         for t in range(len(self.stock_history)):
@@ -483,7 +489,7 @@ class SS_Mngmt_Env(Env):
         self.action_history = [np.zeros(num_nodes)]
         self.demand_history = [np.zeros(num_nodes)]
         self.delivery_history = [np.zeros(num_nodes)]
-        self.backlog_history = [0]
+        self.backlog_history = [[False, False, False]]
         self.reward_history = [0]
 
         # Placeholder for info
