@@ -203,6 +203,7 @@ class SS_Mngmt_Env(Env):
                     inventory_levels[node_index] = (
                         0  # Set stock to zero after fulfilling what we can
                     )
+                    print(f"Unmet demand at node {node} for {unmet_demand} units")
                     reward += (node_demand - unmet_demand) * self.item_prize
                     reward -= self.stockout_cost * unmet_demand  # Apply stockout cost
                     self.backlog_queues[node].append(unmet_demand)
