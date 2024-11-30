@@ -189,3 +189,61 @@ def plot_safety_stock(df, safety_stock=None):
 
         # Add a legend to the plot
         axs[i].legend()
+
+
+# TODO check if this works as expected
+# Function to compare results of different runs
+def benchmark_plot(dataframes, labels):
+    """
+    Function to compare the results of n different runs.
+
+    Parameters:
+    - dataframes: list of pandas DataFrames, each containing the data for a run.
+    - labels: list of strings, labels for the corresponding DataFrames.
+    """
+    num_runs = len(dataframes)
+    colors = plt.cm.tab10(
+        np.linspace(0, 1, num_runs)
+    )  # Generate distinct colors for each run
+
+    # Create a figure with a subplot for each variable
+    fig, axs = plt.subplots(
+        1, 3, figsize=(20, 5)
+    )  # Adjusted for three metrics (Reward, Total Reward, Stockouts)
+
+    # Plot the 'Reward' over time
+    for i, (df, label) in enumerate(zip(dataframes, labels)):
+        axs[0].plot(
+            df["Time"], df["Reward"], label=f"{label} - Reward", color=colors[i]
+        )
+    axs[0].set_title("Reward over Time")
+    axs[0].legend()
+
+    # Plot the 'Total Reward' over time
+    for i, (df, label) in enumerate(zip(dataframes, labels)):
+        axs[1].plot(
+            df["Time"],
+            df["Total Reward"],
+            label=f"{label} - Total Reward",
+            color=colors[i],
+        )
+    axs[1].set_title("Total Reward over Time")
+    axs[1].legend()
+
+    # Plot stockouts (backlog) over time
+    for i, (df, label) in enumerate(zip(dataframes, labels)):
+        stockouts = df["Backlog"].sum()
+        axs[2].plot(
+            df["Time"],
+            df["Backlog"],
+            label=f"{label} - Stockouts ({stockouts})",
+            color=colors[i],
+        )
+    axs[2].set_title("Stockouts Over Time")
+    axs[2].legend()
+
+    # Adjust spacing
+    plt.subplots_adjust(hspace=0.5, wspace=0.3)
+
+    # Show the plot
+    plt.show()
