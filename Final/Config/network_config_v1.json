@@ -7,12 +7,12 @@
       "S": { "type": "source" }
     },
     "edges": [
-      { "source": "S", "target": "A", "L": 5, "D": 0 },
-      { "source": "S", "target": "B", "L": 5, "D": 0 },
-      { "source": "S", "target": "C", "L": 5, "D": 0 },
-      { "source": "A", "target": "D", "L": 5, "D": 0 },
-      { "source": "B", "target": "D", "L": 5, "D": 0 },
-      { "source": "C", "target": "D", "L": 5, "D": 0 }
+      { "source": "S", "target": "A", "L": 3, "D": 0 },
+      { "source": "S", "target": "B", "L": 3, "D": 0 },
+      { "source": "S", "target": "C", "L": 3, "D": 0 },
+      { "source": "A", "target": "D", "L": 3, "D": 0 },
+      { "source": "B", "target": "D", "L": 3, "D": 0 },
+      { "source": "C", "target": "D", "L": 3, "D": 0 }
     ]
   }
   

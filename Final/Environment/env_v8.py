@@ -42,7 +42,8 @@ class SS_Mngmt_Env(Env):
         network_config=None,
         render_mode=None,
         model_type=None,
-        stockout_cost=1000,  # Cost of stockout
+        stockout_cost=500,  # Cost of stockout
+        stock_out_max=9,  # Maximum number of stockouts
         order_cost=5,  # Cost of each order
         item_cost=0.1,  # Cost of each item
         stock_cost=0.5,  # Cost of stock per unit
@@ -61,6 +62,7 @@ class SS_Mngmt_Env(Env):
         render_mode: str - Render mode for the environment
         model_type: str - Type of model (e.g., PPO, A2C)
         stockout_cost: float - Cost of stockout
+        stock_out_max: int - Maximum number of stockouts
         order_cost: float - Cost of each order
         item_cost: float - Cost of each item
         stock_cost: float - Cost of stock per unit
@@ -75,6 +77,8 @@ class SS_Mngmt_Env(Env):
 
         self.EP_LENGTH = EP_LENGTH  # Total length
         self.episode_length = EP_LENGTH  # Current length of the episode
+
+        self.total_reward = 0
 
         self.model_type = model_type
 
@@ -91,7 +95,10 @@ class SS_Mngmt_Env(Env):
         self.order_cost = order_cost
         self.item_cost = item_cost
         self.stock_cost = stock_cost
+        self.stock_out_max = stock_out_max
         self.item_prize = item_prize
+
+        self.stock_out_counter = 0
 
         self.order_quantities = order_quantities
 
@@ -102,20 +109,10 @@ class SS_Mngmt_Env(Env):
         self.backlog_queues = self.backlog_queue()
 
         # Define action space
-        n_actions = 3
+        n_actions = len(order_quantities)
         n_nodes = len(self.graph.nodes) - 2
         action_choices = np.full(n_nodes, n_actions)
         self.action_space = MultiDiscrete(action_choices)
-
-        # # Define the lower bounds for stock level and expected demand
-        # low_stock = np.full((1, num_nodes), 0)
-        # low_demand = np.full((self.EP_LENGTH, num_nodes), 0)
-        # low = np.concatenate([low_stock, low_demand]).flatten()
-
-        # # Define the upper bounds for stock level and expected demand
-        # high_stock = np.full((1, num_nodes), 1000)
-        # high_demand = np.full((self.EP_LENGTH, num_nodes), 20)
-        # high = np.concatenate([high_stock, high_demand]).flatten()
 
         # Define the observation space
         self.observation_space = Dict(
@@ -123,12 +120,12 @@ class SS_Mngmt_Env(Env):
                 "inventory_levels": Box(
                     low=0, high=1000, shape=(num_nodes,), dtype=np.float32
                 ),
-                "planned_demand": Box(
-                    low=0, high=30, shape=(self.EP_LENGTH, num_nodes), dtype=np.float32
-                ),
-                "actual_demand": Box(
-                    low=0, high=30, shape=(num_nodes,), dtype=np.float32
-                ),
+                # "planned_demand": Box(
+                #     low=0, high=30, shape=(self.EP_LENGTH, num_nodes), dtype=np.float32
+                # ),
+                # "actual_demand": Box(
+                #     low=0, high=30, shape=(num_nodes,), dtype=np.float32
+                # ),
             }
         )
 
@@ -139,8 +136,12 @@ class SS_Mngmt_Env(Env):
         self.demand_noise_std = demand_noise_std
         self.demand_prob = demand_prob
 
-        self.planned_demands = self.planned_demand()
-        self.actual_demands = self.actual_demand(self.planned_demands)
+        self.planned_demands = self.planned_demand(
+            self.demand_mean, self.demand_std, self.demand_prob
+        )
+        self.actual_demands = self.actual_demand(
+            self.planned_demands, self.demand_noise_std, self.demand_noise
+        )
 
         # Collect initial inventories from the graph
         initial_inventories = []
@@ -174,6 +175,12 @@ class SS_Mngmt_Env(Env):
 
     # Defining the step function
     def step(self, action):
+        """
+        Executes one step in the environment.
+        Starts by processing the orders and updating the inventory levels for each node.
+        Then, it computes the reward based on the order costs and stock level.
+        Finally, it checks if the episode is done and returns the next state, reward, and whether the episode is done.
+        """
 
         # Returns the next state, reward and whether the episode is done
         timestep = self.EP_LENGTH - self.episode_length
@@ -224,12 +231,13 @@ class SS_Mngmt_Env(Env):
                 else:
                     # Insufficient stock - add unmet demand to backlog and apply penalty
                     unmet_demand = node_demand - inventory_levels[node_index]
-                    inventory_levels[node_index] = (
-                        0  # Set stock to zero after fulfilling what we can
-                    )
+                    inventory_levels[node_index] -= node_demand - unmet_demand
                     reward += (node_demand - unmet_demand) * self.item_prize
                     reward -= self.stockout_cost * unmet_demand  # Apply stockout cost
                     self.backlog_queues[node].append(unmet_demand)
+
+                    # Increment the stockout counter
+                    self.stock_out_counter += 1
 
                 # Process backlog with any remaining stock
                 while self.backlog_queues[node] and inventory_levels[node_index] > 0:
@@ -241,14 +249,18 @@ class SS_Mngmt_Env(Env):
                     else:
                         break  # Not enough stock to clear the backlog completely
 
+                # backlog penalty
+                reward -= self.stockout_cost * len(self.backlog_queues[node])
+
                 # Replenish order queue
                 self.order_queues[node].append(self.new_order[node_index])
 
         # Compute the reward based on the order costs and stock level
         reward -= np.sum(inventory_levels * self.stock_cost)
 
-        # Check if the episode is done
-        done = self.episode_length == 0
+        # Penalty if the episode cannot be completed
+        if self.stock_out_counter >= self.stock_out_max:
+            reward -= (self.EP_LENGTH - self.episode_length) * self.stockout_cost
 
         # Decrease the episode length
         self.episode_length -= 1
@@ -266,9 +278,13 @@ class SS_Mngmt_Env(Env):
         # Update the observation space
         obs = {
             "inventory_levels": self.inventory.astype(np.float32),
-            "planned_demand": self.planned_demands,
-            "actual_demand": self.current_demand,
+            # "planned_demand": self.planned_demands,
+            # "actual_demand": self.current_demand,
         }
+
+        # Update the reward
+        self.total_reward = self.total_reward + reward
+        reward = self.total_reward
 
         # Update the history data
         self.reward_history.append(reward)
@@ -280,8 +296,13 @@ class SS_Mngmt_Env(Env):
             [len(queue) > 0 for queue in self.backlog_queues.values()]
         )
 
+        # Check if the episode is done
+        done = self.episode_length == 0
+
         # Check if episode is done
-        if self.episode_length <= 0:
+        if self.stock_out_counter >= self.stock_out_max:
+            done = True
+        elif self.episode_length <= 0:
             done = True
         else:
             done = False
@@ -301,7 +322,11 @@ class SS_Mngmt_Env(Env):
                 self.render_human()
 
     def render_human(self):
+        """
+        Renders the environment in human mode.
+        """
 
+        print("*" * 50)
         print("\nEpisode Information")
         print(f"Episode Length: {self.EP_LENGTH - self.episode_length}")
         if len(self.stock_history) > 1:
@@ -316,38 +341,45 @@ class SS_Mngmt_Env(Env):
         )
         print(f"Actual Demand: {self.current_demand}")
         print(f"Action: {self.new_order}")
-        print(f"Order: {self.orders}")
-        print(
-            f"Reward: {self.reward_history[self.EP_LENGTH - self.episode_length - 1]}"
-        )
-        print(f"Last element Reward: {self.reward_history[-1]}")
+        print(f"Deliveries: {self.orders}")
+        # print(
+        #     f"Previous Reward: {self.reward_history[self.EP_LENGTH - self.episode_length - 1]}"
+        # )
+        print(f"Step Reward: {self.reward_history[-1]}")
+        print(f"Total Reward: {self.total_reward}")
 
         print("\nBacklog:")
         print([len(queue) > 0 for queue in self.backlog_queues.values()])
-        pprint(self.backlog_queues, indent=4)
+        # pprint(self.backlog_queues, indent=4)
 
         print("\nOrder Queue:")
         pprint(self.order_queues, indent=4)
         print()
 
-        print("Stockout Cost: ", self.stockout_cost)
+        # print("Stockout Cost: ", self.stockout_cost)
+        print("\nStockout Counter: ", self.stock_out_counter)
 
         # Save the data
         now = datetime.now()
         path = f'./Data/{now.strftime("%Y-%m-%d_%H")}_last_environment_data_{self.model_type}.csv'
 
-        self.save_data(path)
+        if self.episode_length == 1:
+            self.save_data(path)
+        elif self.stock_out_counter >= self.stock_out_max:
+            self.save_data(path)
 
         return
 
     def save_data(self, path):
-        # Saves the episode data to a CSV file
+        """
+        Saves the history data to a CSV file.
+        """
 
-        print(
-            f"Lengths - stock: {len(self.stock_history)}, action: {len(self.action_history)}, "
-            f"demand: {len(self.demand_history)}, delivery: {len(self.delivery_history)}, "
-            f"reward: {len(self.reward_history)}, backlog: {len(self.backlog_history)}"
-        )
+        # print(
+        #     f"Lengths - stock: {len(self.stock_history)}, action: {len(self.action_history)}, "
+        #     f"demand: {len(self.demand_history)}, delivery: {len(self.delivery_history)}, "
+        #     f"reward: {len(self.reward_history)}, backlog: {len(self.backlog_history)}"
+        # )
 
         data = []
 
@@ -367,11 +399,14 @@ class SS_Mngmt_Env(Env):
 
         df = pd.DataFrame(data)
 
-        if self.episode_length == 1:
-            df.to_csv(path, index=False)
+        df.to_csv(path, index=False)
+
+        print(f"Data saved to {path}")
 
     def setup_network(self, network_config=None):
-        # Load the network configuration from a JSON string
+        """
+        Sets up the network graph based on the configuration provided.
+        """
         config = json.loads(network_config)
 
         # Add nodes to the graph
@@ -381,12 +416,6 @@ class SS_Mngmt_Env(Env):
         # Add edges to the graph with lead times
         for edge in config["edges"]:
             self.graph.add_edge(edge["source"], edge["target"], L=edge["L"])
-
-    def setup_costs(self, cost_config=None):
-        # TODO
-        # Load the cost configuration from a JSON string
-        # Placeholder for now
-        return 0
 
     def render_network(self):
         """
@@ -428,7 +457,7 @@ class SS_Mngmt_Env(Env):
         """
         return list(self.graph.nodes)[index]
 
-    def planned_demand(self):
+    def planned_demand(self, demand_mean, demand_std, demand_prob):
         """
         Generates planned demand for each edge in the network over the whole episode.
         """
@@ -442,14 +471,14 @@ class SS_Mngmt_Env(Env):
         for i, edge in enumerate(edges_leading_to_D):
             for j in range(self.EP_LENGTH):
                 # Introduce a probability of having demand
-                if np.random.rand() < self.demand_prob:
+                if np.random.rand() < demand_prob:
                     planned_demand[j, i] = int(
-                        np.random.normal(self.demand_mean, self.demand_std)
+                        np.random.normal(demand_mean, demand_std)
                     )
 
         return planned_demand
 
-    def planned_demand(self):
+    def planned_demand_even(self, demand_mean, demand_std):
         """
         Generates planned demand for each edge in the network over the whole episode.
         The demand is distributed evenly, occurring only at fixed intervals (e.g., every fifth timestep).
@@ -468,13 +497,13 @@ class SS_Mngmt_Env(Env):
             for j in timesteps_with_demand:
                 # Generate demand from a normal distribution
                 demand = max(
-                    0, np.random.normal(self.demand_mean, self.demand_std)
+                    0, np.random.normal(demand_mean, demand_std)
                 )  # Ensure non-negative demand
                 planned_demand[j, i] = int(demand)
 
         return planned_demand
 
-    def actual_demand(self, planned_demand):
+    def actual_demand(self, planned_demand, demand_noise_std, demand_noise):
         """
         Generates a random actual demand for each edge in the network based on the planned demand from the current timestep.
         """
@@ -488,14 +517,17 @@ class SS_Mngmt_Env(Env):
             for j in range(actual_demand.shape[1]):
                 # Add a small random noise to the planned demand
                 if planned_demand[i, j] > 0:
-                    noise = np.random.normal(self.demand_noise, self.demand_noise_std)
+                    noise = np.random.normal(demand_noise, demand_noise_std)
                     # Ensure actual demand is not less than 0
                     actual_demand[i, j] = int(max(0, actual_demand[i, j] + noise))
 
         return actual_demand
 
     def order_queue(self, initial_order=10):
-        # Create a dictionary for the order queues
+        """
+        Creates a dictionary for the order queues for each node in the network.
+        """
+
         order_queues = {}
 
         for node in self.graph.nodes:
@@ -514,7 +546,10 @@ class SS_Mngmt_Env(Env):
         return order_queues
 
     def backlog_queue(self):
-        # Create a dictionary for the backlog queues
+        """
+        Creates a dictionary for the backlog queues for each node in the network.
+        """
+
         backlog_queues = {}
 
         for node in self.graph.nodes:
@@ -527,14 +562,17 @@ class SS_Mngmt_Env(Env):
         return backlog_queues
 
     def reset(self, seed=None):
-        # Reset the state of the environment back to an initial state
-
+        """
+        Resets the environment to the initial state.
+        """
         super().reset(seed=seed)  # Reset the seed
         if seed is not None:
             random.seed(seed)
 
         # Reset the episode length
         self.episode_length = self.EP_LENGTH
+
+        self.total_reward = 0
 
         # Reset the network
         self.graph = nx.DiGraph()
@@ -546,11 +584,17 @@ class SS_Mngmt_Env(Env):
         self.order_queues = self.order_queue(initial_order=self.order_quantities[1])
         self.backlog_queues = self.backlog_queue()
 
+        self.stock_out_counter = 0
+
         # Define the initial state
-        self.planned_demands = self.planned_demand().astype(np.float32)
-        self.actual_demands = self.actual_demand(self.planned_demands).astype(
-            np.float32
-        )
+        self.planned_demands = self.planned_demand(
+            self.demand_mean, self.demand_std, self.demand_prob
+        ).astype(np.float32)
+
+        self.actual_demands = self.actual_demand(
+            self.planned_demands, self.demand_noise_std, self.demand_noise
+        ).astype(np.float32)
+
         self.current_demand = self.actual_demands[0].astype(np.float32)
 
         # Collect initial inventories from the graph
@@ -561,9 +605,6 @@ class SS_Mngmt_Env(Env):
 
         # Convert to numpy array
         initial_inventories = np.array(initial_inventories, dtype=np.float32).flatten()
-        # initial_inventories = initial_inventories.reshape(
-        #     1, initial_inventories.shape[0]
-        # )
 
         self.state = {
             "inventory_levels": initial_inventories,
@@ -573,8 +614,8 @@ class SS_Mngmt_Env(Env):
 
         obs = {
             "inventory_levels": initial_inventories,
-            "planned_demand": self.planned_demands,
-            "actual_demand": self.current_demand,
+            # "planned_demand": self.planned_demands,
+            # "actual_demand": self.current_demand,
         }
 
         # Resetting history data
