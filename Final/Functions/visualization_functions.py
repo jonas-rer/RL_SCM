@@ -10,6 +10,9 @@ import seaborn as sns
 
 # Function to plot the data
 def plot_data(df):
+    """
+    Plot the data in the dataframe.
+    """
 
     # Get the unique nodes
     nodes = df["Node"].unique()
@@ -107,10 +110,10 @@ def plot_data(df):
 # Function to visualize the stock and safety stock
 
 
-def plot_safety_stock(df):
-
-    # Compute the safety stock level for each node
-    safety_stock = df["Demand"].mean() * df["Lead Time"].mean()
+def plot_safety_stock(df, safety_stock=None):
+    """
+    Function to plot the stock and safety stock over time for each node
+    """
 
     # Get the unique nodes
     nodes = df["Node"].unique()
@@ -118,8 +121,20 @@ def plot_safety_stock(df):
     # Create a list of colors
     colors = ["b", "g", "c", "m", "y", "k"]
 
-    # Create a figure with a subplot for each node and each variable
-    fig, axs = plt.subplots(len(nodes), 4, figsize=(20, len(nodes) * 5))
+    # Create a figure with a subplot for each node
+    fig, axs = plt.subplots(len(nodes), 1, figsize=(10, len(nodes) * 5))
+
+    # Compute safety stock for each node
+    def compute_safety_stock(df):
+        safety_stock_list = []
+        for node in df["Node"].unique():
+            node_data = df[df["Node"] == node]
+            safety_stock.append(node_data[node_data["Delivery"] > 0]["Stock"].mean())
+
+        return safety_stock_list
+
+    if safety_stock is not None:
+        safety_stock = list(safety_stock.values())
 
     # Loop over all nodes
     for i, node in enumerate(nodes):
@@ -127,19 +142,50 @@ def plot_safety_stock(df):
         node_data = df[df["Node"] == node]
 
         # Plot the 'Stock' over time
-        axs[i, 0].bar(
+        axs[i].bar(
             node_data["Time"],
             node_data["Stock"],
             label=f"Node: {node}",
             color=colors[i % len(colors)],
         )
 
-        axs[i, 0].set_title(f"Stock over time for node {node}")
+        axs[i].set_title(f"Stock over time for node {node}")
 
-        mean_stock = node_data["Stock"].mean()
-        axs[i, 0].axhline(
-            mean_stock,
+        if safety_stock is not None:
+
+            axs[i].axhline(
+                safety_stock[i],
+                color="orange",
+                linestyle="--",
+                label=f"Safety Stock: {safety_stock[i]:.1f}",
+            )
+
+        else:
+            # Add the safety stock to the plot
+            safety_stock = compute_safety_stock(df)
+            axs[i].axhline(
+                safety_stock[i],
+                color="orange",
+                linestyle="--",
+                label=f"Safety Stock: {safety_stock[i]:.1f}",
+            )
+
+        cycle_stock = 0.5 * node_data["Stock"].mean() + safety_stock[i]
+        axs[i].axhline(
+            cycle_stock,
             color="red",
             linestyle="--",
-            label=f"Mean: {mean_stock:.2f}",
+            label=f"Cycle stock: {cycle_stock:.1f}",
         )
+
+        # TODO Pass trough the lead time to calculate the cycle stock
+        # cycle_stock = node_data["Demand"].mean() * node_data["Lead_Time"].mean() + safety_stock[i]
+        # axs[i].axhline(
+        #     cycle_stock,
+        #     color="red",
+        #     linestyle="--",
+        #     label=f"Cycle stock: {cycle_stock:.1f}",
+        # )
+
+        # Add a legend to the plot
+        axs[i].legend()

@@ -87,6 +87,8 @@ class SS_Mngmt_Env(Env):
         self.graph = nx.DiGraph()
         self.setup_network(self.network_config)
 
+        self.lead_times = nx.get_edge_attributes(self.graph, "L")
+
         # Number of nodes excluding 'S' and 'D'
         num_nodes = len(self.graph.nodes) - 2
 
@@ -445,12 +447,6 @@ class SS_Mngmt_Env(Env):
                 data.append(row)
 
         df = pd.DataFrame(data)
-
-        # Add the lead time to the nodes
-        df["Lead Time"] = None
-        for node in self.graph.nodes:
-            if node not in ["S", "D"]:
-                df.loc[df["Node"] == node, "Lead Time"] = self.graph.nodes[node]["L"]
 
         df.to_csv(path, index=False)
 
