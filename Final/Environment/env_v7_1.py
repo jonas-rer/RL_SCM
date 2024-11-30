@@ -26,6 +26,9 @@ from stable_baselines3.common.evaluation import evaluate_policy
 
 
 class SS_Mngmt_Env(Env):
+    """
+    Supply Chain Management Environment
+    """
 
     metadata = {"render_modes": ["human"], "render_fps": 4}
 
@@ -48,10 +51,27 @@ class SS_Mngmt_Env(Env):
         demand_noise_std=2,  # Standard deviation of noise in demand
         demand_prob=0.4,  # Probability of having demand
     ):
+        """
+        Initialize the environment
+        EP_LENGTH: int - Total length of the episode
+        network_config: str - JSON string with network configuration
+        render_mode: str - Render mode for the environment
+        model_type: str - Type of model (e.g., PPO, A2C)
+        stockout_cost: float - Cost of stockout
+        order_cost: float - Cost of each order
+        item_cost: float - Cost of each item
+        stock_cost: float - Cost of stock per unit
+        item_prize: float - Prize of each item
+        order_quantities: list - Order quantities for each node
+        demand_mean: float - Mean demand
+        demand_std: float - Standard deviation of demand
+        demand_noise: float - Mean noise in demand
+        demand_noise_std: float - Standard deviation of noise in demand
+        demand_prob: float - Probability of having demand
+        """
 
         self.EP_LENGTH = EP_LENGTH  # Total length
         self.episode_length = EP_LENGTH  # Current length of the episode
-        self.episode_reward = 0  # Reward for the current episode
 
         self.model_type = model_type
 
@@ -77,7 +97,6 @@ class SS_Mngmt_Env(Env):
 
         # Backlog queue for each node
         self.backlog_queues = self.backlog_queue()
-        self.backlog = False
 
         # Define action space
         n_actions = 3
@@ -145,7 +164,6 @@ class SS_Mngmt_Env(Env):
         self.delivery_history = [np.zeros(num_nodes)]
         self.backlog_history = [[False, False, False]]
         self.reward_history = [np.sum(initial_inventories * self.stock_cost)]
-        self.episode_reward_history = self.reward_history
 
         # Render mode
         self.render_mode = render_mode
@@ -162,7 +180,7 @@ class SS_Mngmt_Env(Env):
         # Retrieve the current inventory levels
         self.inventory = self.state["inventory_levels"]
         inventory_levels = np.copy(self.inventory)
-        reward = self.episode_reward
+        reward = 0
 
         # Retrieve the actual demand for the current timestep
         self.current_demand = self.actual_demands[timestep].astype(np.float32)
@@ -196,14 +214,10 @@ class SS_Mngmt_Env(Env):
 
                 # Attempt to meet current demand
                 node_demand = self.current_demand[node_index]
-                if (
-                    inventory_levels[node_index] >= node_demand
-                    and self.check_backlog == False
-                ):
+                if inventory_levels[node_index] >= node_demand:
                     # Enough stock to meet demand
                     inventory_levels[node_index] -= node_demand
                     reward += node_demand * self.item_prize
-                    self.backlog_ckeck = False
                 else:
                     # Insufficient stock - add unmet demand to backlog and apply penalty
                     unmet_demand = node_demand - inventory_levels[node_index]
@@ -212,7 +226,6 @@ class SS_Mngmt_Env(Env):
                     )
                     reward += (node_demand - unmet_demand) * self.item_prize
                     reward -= self.stockout_cost * unmet_demand  # Apply stockout cost
-                    self.check_backlog = True
                     self.backlog_queues[node].append(unmet_demand)
 
                 # Process backlog with any remaining stock
@@ -224,10 +237,6 @@ class SS_Mngmt_Env(Env):
                         self.backlog_queues[node].popleft()
                     else:
                         break  # Not enough stock to clear the backlog completely
-
-                # Check if the backlog is empty
-                if len(self.backlog_queues[node]) == 0:
-                    self.check_backlog = False
 
                 # Replenish order queue
                 self.order_queues[node].append(self.new_order[node_index])
@@ -243,8 +252,6 @@ class SS_Mngmt_Env(Env):
 
         inventory_levels = inventory_levels.flatten()
         self.inventory = inventory_levels
-
-        self.episode_reward += reward
 
         # Update the state
         self.state = {
@@ -262,7 +269,6 @@ class SS_Mngmt_Env(Env):
 
         # Update the history data
         self.reward_history.append(reward)
-        self.episode_reward_history.append(self.episode_reward)
         self.stock_history.append(list(self.inventory))
         self.demand_history.append(self.current_demand)
         self.action_history.append(self.new_order)
@@ -308,8 +314,10 @@ class SS_Mngmt_Env(Env):
         print(f"Actual Demand: {self.current_demand}")
         print(f"Action: {self.new_order}")
         print(f"Order: {self.orders}")
-        print(f"Reward: {self.reward_history[-1]}")
-        print(f"Episode Reward: {self.reward_history[-1] - self.reward_history[-2]}")
+        print(
+            f"Reward: {self.reward_history[self.EP_LENGTH - self.episode_length - 1]}"
+        )
+        print(f"Last element Reward: {self.reward_history[-1]}")
 
         print("\nBacklog:")
         print([len(queue) > 0 for queue in self.backlog_queues.values()])
@@ -320,7 +328,6 @@ class SS_Mngmt_Env(Env):
         print()
 
         print("Stockout Cost: ", self.stockout_cost)
-        print(self.check_backlog)
 
         # Save the data
         now = datetime.now()
@@ -333,12 +340,11 @@ class SS_Mngmt_Env(Env):
     def save_data(self, path):
         # Saves the episode data to a CSV file
 
-        # # For debugging
-        # print(
-        #     f"Lengths - stock: {len(self.stock_history)}, action: {len(self.action_history)}, "
-        #     f"demand: {len(self.demand_history)}, delivery: {len(self.delivery_history)}, "
-        #     f"reward: {len(self.reward_history)}, backlog: {len(self.backlog_history)}"
-        # )
+        print(
+            f"Lengths - stock: {len(self.stock_history)}, action: {len(self.action_history)}, "
+            f"demand: {len(self.demand_history)}, delivery: {len(self.delivery_history)}, "
+            f"reward: {len(self.reward_history)}, backlog: {len(self.backlog_history)}"
+        )
 
         data = []
 
@@ -352,7 +358,6 @@ class SS_Mngmt_Env(Env):
                     "Demand": self.demand_history[t][n],
                     "Delivery": self.delivery_history[t][n],
                     "Reward": self.reward_history[t],
-                    "Episode": self.episode_reward,
                     "Backlog": self.backlog_history[t][n],
                 }
                 data.append(row)
@@ -381,7 +386,9 @@ class SS_Mngmt_Env(Env):
         return 0
 
     def render_network(self):
-        # Render the network using networkx
+        """
+        Renders the network graph using NetworkX and Matplotlib.
+        """
 
         print("Node Attributes:")
         for node, attributes in self.graph.nodes(data=True):
@@ -407,14 +414,21 @@ class SS_Mngmt_Env(Env):
         plt.show()
 
     def node_to_index(self, node):
-        # Creates a mapping from node names to indices
+        """
+        Returns the index of the node given its name.
+        """
         return list(self.graph.nodes).index(node)
 
     def get_node_name(self, index):
-        # Creates a mapping from indices to node names
+        """
+        Returns the name of the node given its index.
+        """
         return list(self.graph.nodes)[index]
 
     def planned_demand(self):
+        """
+        Generates planned demand for each edge in the network over the whole episode.
+        """
         # Generates a random planned demand for each edge in the network
         # over the whole episode. The demand is drawn from a normal distribution
 
@@ -432,7 +446,35 @@ class SS_Mngmt_Env(Env):
 
         return planned_demand
 
+    def planned_demand(self):
+        """
+        Generates planned demand for each edge in the network over the whole episode.
+        The demand is distributed evenly, occurring only at fixed intervals (e.g., every fifth timestep).
+        """
+
+        # Get edges leading to "D"
+        edges_leading_to_D = [edge for edge in self.graph.edges if edge[1] == "D"]
+
+        # Initialize demand array with zeros
+        planned_demand = np.zeros((self.EP_LENGTH, len(edges_leading_to_D)))
+
+        for i, edge in enumerate(edges_leading_to_D):
+            # Determine timesteps where demand occurs (e.g., every fifth timestep)
+            timesteps_with_demand = np.arange(0, self.EP_LENGTH, 5)
+
+            for j in timesteps_with_demand:
+                # Generate demand from a normal distribution
+                demand = max(
+                    0, np.random.normal(self.demand_mean, self.demand_std)
+                )  # Ensure non-negative demand
+                planned_demand[j, i] = int(demand)
+
+        return planned_demand
+
     def actual_demand(self, planned_demand):
+        """
+        Generates a random actual demand for each edge in the network based on the planned demand from the current timestep.
+        """
 
         # Generate a random actual demand for each edge in the network
         # based on the planned demand from the current timestep. The demand
@@ -490,7 +532,6 @@ class SS_Mngmt_Env(Env):
 
         # Reset the episode length
         self.episode_length = self.EP_LENGTH
-        self.episode_reward = 0  # Reward for the current episode
 
         # Reset the network
         self.graph = nx.DiGraph()
@@ -501,7 +542,6 @@ class SS_Mngmt_Env(Env):
         # Order delay and backlog queue
         self.order_queues = self.order_queue(initial_order=self.order_quantities[1])
         self.backlog_queues = self.backlog_queue()
-        self.check_backlog = False
 
         # Define the initial state
         self.planned_demands = self.planned_demand().astype(np.float32)
@@ -542,7 +582,6 @@ class SS_Mngmt_Env(Env):
         self.delivery_history = [np.zeros(num_nodes)]
         self.backlog_history = [[False, False, False]]
         self.reward_history = [np.sum(initial_inventories * self.stock_cost)]
-        self.episode_reward_history = self.reward_history
 
         # Placeholder for info
         info = {}

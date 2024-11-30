@@ -38,8 +38,10 @@ def deep_q_learning(
     memory_size=10000,
     model_save_path="q_network_model",
 ):
-    state_size = env.observation_space.shape[0]  # For continuous state spaces
-    action_sizes = env.action_space.nvec
+    state_size = env.observation_space.shape[
+        0
+    ]  # For continuous state spaces # env.observation_space.n for discrete
+    action_sizes = env.action_space.nvec  # For MultiDiscrete action spaces
 
     q_network = create_q_network(state_size, action_sizes, learning_rate)
     memory = deque(maxlen=memory_size)

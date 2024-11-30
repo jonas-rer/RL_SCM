@@ -80,8 +80,6 @@ for _ in range(num_samples):
     model = PPO(
         "MlpPolicy",
         DummyVecEnv([lambda: env]),
-        learning_rate=0.0007,
-        gamma=0.99,
         verbose=0,
     )
     model.learn(total_timesteps=10_000)  # Short initial training
