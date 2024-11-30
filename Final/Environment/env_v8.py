@@ -115,17 +115,34 @@ class SS_Mngmt_Env(Env):
         self.action_space = MultiDiscrete(action_choices)
 
         # Define the observation space
+        # self.observation_space = Dict(
+        #     {
+        #         "inventory_levels": Box(
+        #             low=0, high=1000, shape=(num_nodes,), dtype=np.float32
+        #         ),
+        #         # "planned_demand": Box(
+        #         #     low=0, high=30, shape=(self.EP_LENGTH, num_nodes), dtype=np.float32
+        #         # ),
+        #         # "actual_demand": Box(
+        #         #     low=0, high=30, shape=(num_nodes,), dtype=np.float32
+        #         # ),
+        #     }
+        # )
+
         self.observation_space = Dict(
             {
                 "inventory_levels": Box(
                     low=0, high=1000, shape=(num_nodes,), dtype=np.float32
                 ),
-                # "planned_demand": Box(
-                #     low=0, high=30, shape=(self.EP_LENGTH, num_nodes), dtype=np.float32
-                # ),
-                # "actual_demand": Box(
-                #     low=0, high=30, shape=(num_nodes,), dtype=np.float32
-                # ),
+                "current_demand": Box(
+                    low=0, high=1000, shape=(num_nodes,), dtype=np.float32
+                ),
+                "backlog_levels": Box(
+                    low=0, high=1000, shape=(num_nodes,), dtype=np.float32
+                ),
+                "order_queue_status": Box(
+                    low=0, high=1000, shape=(num_nodes,), dtype=np.float32
+                ),
             }
         )
 
@@ -158,6 +175,9 @@ class SS_Mngmt_Env(Env):
             "inventory_levels": initial_inventories.astype(np.float32),
             "planned_demand": self.planned_demands,
             "actual_demand": self.actual_demands,
+            "current_demand": self.actual_demands[0],
+            "backlog_levels": np.zeros(num_nodes),
+            "order_queue_status": np.zeros(num_nodes),
         }
 
         # Prep to save the data
@@ -167,7 +187,7 @@ class SS_Mngmt_Env(Env):
         self.demand_history = [np.zeros(num_nodes)]
         self.delivery_history = [np.zeros(num_nodes)]
         self.backlog_history = [[False, False, False]]
-        self.reward_history = [np.sum(initial_inventories * self.stock_cost)]
+        self.reward_history = [np.sum(initial_inventories * self.stock_cost * -1)]
 
         # Render mode
         self.render_mode = render_mode
@@ -269,22 +289,46 @@ class SS_Mngmt_Env(Env):
         self.inventory = inventory_levels
 
         # Update the state
+        # self.state = {
+        #     "inventory_levels": inventory_levels.astype(np.float32),
+        #     "planned_demand": self.planned_demands,
+        #     "actual_demand": self.current_demand,
+        # }
+
         self.state = {
             "inventory_levels": inventory_levels.astype(np.float32),
             "planned_demand": self.planned_demands,
-            "actual_demand": self.current_demand,
+            "actual_demand": self.actual_demands,
+            "current_demand": self.actual_demands[0],
+            "backlog_levels": np.zeros(num_nodes),
+            "order_queue_status": np.zeros(num_nodes),
         }
 
         # Update the observation space
+        # obs = {
+        #     "inventory_levels": self.inventory.astype(np.float32),
+        #     # "planned_demand": self.planned_demands,
+        #     # "actual_demand": self.current_demand,
+        # }
+
         obs = {
             "inventory_levels": self.inventory.astype(np.float32),
-            # "planned_demand": self.planned_demands,
-            # "actual_demand": self.current_demand,
+            "current_demand": self.current_demand.astype(np.float32),
+            "backlog_levels": np.array(
+                [len(queue) for queue in self.backlog_queues.values()], dtype=np.float32
+            ),
+            "order_queue_status": np.array(
+                [
+                    sum(self.order_queues[node])
+                    for node in self.graph.nodes
+                    if node not in ["S", "D"]
+                ],
+                dtype=np.float32,
+            ),
         }
 
         # Update the reward
         self.total_reward = self.total_reward + reward
-        reward = self.total_reward
 
         # Update the history data
         self.reward_history.append(reward)
@@ -363,10 +407,7 @@ class SS_Mngmt_Env(Env):
         now = datetime.now()
         path = f'./Data/{now.strftime("%Y-%m-%d_%H")}_last_environment_data_{self.model_type}.csv'
 
-        if self.episode_length == 1:
-            self.save_data(path)
-        elif self.stock_out_counter >= self.stock_out_max:
-            self.save_data(path)
+        self.save_data(path)
 
         return
 
@@ -457,7 +498,7 @@ class SS_Mngmt_Env(Env):
         """
         return list(self.graph.nodes)[index]
 
-    def planned_demand(self, demand_mean, demand_std, demand_prob):
+    def planned_demand(self, demand_mean=10, demand_std=2, demand_prob=0.8):
         """
         Generates planned demand for each edge in the network over the whole episode.
         """
@@ -612,10 +653,26 @@ class SS_Mngmt_Env(Env):
             "actual_demand": self.current_demand,
         }
 
+        # obs = {
+        #     "inventory_levels": initial_inventories,
+        #     # "planned_demand": self.planned_demands,
+        #     # "actual_demand": self.current_demand,
+        # }
+
         obs = {
-            "inventory_levels": initial_inventories,
-            # "planned_demand": self.planned_demands,
-            # "actual_demand": self.current_demand,
+            "inventory_levels": self.inventory.astype(np.float32),
+            "current_demand": self.current_demand.astype(np.float32),
+            "backlog_levels": np.array(
+                [len(queue) for queue in self.backlog_queues.values()], dtype=np.float32
+            ),
+            "order_queue_status": np.array(
+                [
+                    sum(self.order_queues[node])
+                    for node in self.graph.nodes
+                    if node not in ["S", "D"]
+                ],
+                dtype=np.float32,
+            ),
         }
 
         # Resetting history data
@@ -625,7 +682,7 @@ class SS_Mngmt_Env(Env):
         self.demand_history = [np.zeros(num_nodes)]
         self.delivery_history = [np.zeros(num_nodes)]
         self.backlog_history = [[False, False, False]]
-        self.reward_history = [np.sum(initial_inventories * self.stock_cost)]
+        self.reward_history = [np.sum(initial_inventories * self.stock_cost * -1)]
 
         # Placeholder for info
         info = {}
