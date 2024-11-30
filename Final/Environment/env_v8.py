@@ -188,6 +188,7 @@ class SS_Mngmt_Env(Env):
         self.delivery_history = [np.zeros(num_nodes)]
         self.backlog_history = [[False, False, False]]
         self.reward_history = [np.sum(initial_inventories * self.stock_cost * -1)]
+        self.total_reward_history = [np.sum(initial_inventories * self.stock_cost * -1)]
 
         # Render mode
         self.render_mode = render_mode
@@ -205,7 +206,7 @@ class SS_Mngmt_Env(Env):
         # Returns the next state, reward and whether the episode is done
         timestep = self.EP_LENGTH - self.episode_length
 
-        num_nodes = len(self.graph.nodes) - 2
+        # num_nodes = len(self.graph.nodes) - 2
 
         # Retrieve the current inventory levels
         self.inventory = self.state["inventory_levels"]
@@ -276,11 +277,14 @@ class SS_Mngmt_Env(Env):
                 self.order_queues[node].append(self.new_order[node_index])
 
         # Compute the reward based on the order costs and stock level
-        reward -= np.sum(inventory_levels * self.stock_cost)
+        reward -= np.sum(inventory_levels) * self.stock_cost
 
         # Penalty if the episode cannot be completed
         if self.stock_out_counter >= self.stock_out_max:
-            reward -= (self.EP_LENGTH - self.episode_length) * self.stockout_cost
+            reward -= (self.EP_LENGTH - self.episode_length) * self.stockout_cost * 10
+
+        # Update the reward
+        self.total_reward += reward
 
         # Decrease the episode length
         self.episode_length -= 1
@@ -299,9 +303,9 @@ class SS_Mngmt_Env(Env):
             "inventory_levels": inventory_levels.astype(np.float32),
             "planned_demand": self.planned_demands,
             "actual_demand": self.actual_demands,
-            "current_demand": self.actual_demands[0],
-            "backlog_levels": np.zeros(num_nodes),
-            "order_queue_status": np.zeros(num_nodes),
+            "current_demand": self.actual_demands[timestep],
+            "backlog_levels": self.backlog_queues,
+            "order_queue_status": self.order_queues,
         }
 
         # Update the observation space
@@ -313,7 +317,7 @@ class SS_Mngmt_Env(Env):
 
         obs = {
             "inventory_levels": self.inventory.astype(np.float32),
-            "current_demand": self.current_demand.astype(np.float32),
+            "current_demand": self.actual_demands[timestep].astype(np.float32),
             "backlog_levels": np.array(
                 [len(queue) for queue in self.backlog_queues.values()], dtype=np.float32
             ),
@@ -327,11 +331,9 @@ class SS_Mngmt_Env(Env):
             ),
         }
 
-        # Update the reward
-        self.total_reward = self.total_reward + reward
-
         # Update the history data
         self.reward_history.append(reward)
+        self.total_reward_history.append(self.total_reward)
         self.stock_history.append(list(self.inventory))
         self.demand_history.append(self.current_demand)
         self.action_history.append(self.new_order)
@@ -407,7 +409,10 @@ class SS_Mngmt_Env(Env):
         now = datetime.now()
         path = f'./Data/{now.strftime("%Y-%m-%d_%H")}_last_environment_data_{self.model_type}.csv'
 
-        self.save_data(path)
+        if self.episode_length == 1:
+            self.save_data(path)
+        elif self.stock_out_counter >= self.stock_out_max - 1:
+            self.save_data(path)
 
         return
 
@@ -434,11 +439,18 @@ class SS_Mngmt_Env(Env):
                     "Demand": self.demand_history[t][n],
                     "Delivery": self.delivery_history[t][n],
                     "Reward": self.reward_history[t],
+                    "Total Reward": self.total_reward_history[t],
                     "Backlog": self.backlog_history[t][n],
                 }
                 data.append(row)
 
         df = pd.DataFrame(data)
+
+        # Add the lead time to the nodes
+        df["Lead Time"] = None
+        for node in self.graph.nodes:
+            if node not in ["S", "D"]:
+                df.loc[df["Node"] == node, "Lead Time"] = self.graph.nodes[node]["L"]
 
         df.to_csv(path, index=False)
 
@@ -582,8 +594,6 @@ class SS_Mngmt_Env(Env):
                         [initial_order] + [0] * (lead_time - 1), maxlen=lead_time
                     )
 
-                    order_queues[node].extend([0] * lead_time)
-
         return order_queues
 
     def backlog_queue(self):
@@ -683,6 +693,7 @@ class SS_Mngmt_Env(Env):
         self.delivery_history = [np.zeros(num_nodes)]
         self.backlog_history = [[False, False, False]]
         self.reward_history = [np.sum(initial_inventories * self.stock_cost * -1)]
+        self.total_reward_history = [np.sum(initial_inventories * self.stock_cost * -1)]
 
         # Placeholder for info
         info = {}
