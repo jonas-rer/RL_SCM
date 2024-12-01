@@ -54,8 +54,8 @@ class SS_Mngmt_Env(Env):
         demand_noise=0,  # Mean noise in demand
         demand_noise_std=2,  # Standard deviation of noise in demand
         demand_prob=0.4,  # Probability of having demand
-        progressive_stock_cost=False,
-        kaggle=False,
+        progressive_stock_cost=False,  # Progressive stock cost
+        kaggle=False,  # Kaggle mode (True or False)
     ):
         """
         Initialize the environment
@@ -75,6 +75,8 @@ class SS_Mngmt_Env(Env):
         demand_noise: float - Mean noise in demand
         demand_noise_std: float - Standard deviation of noise in demand
         demand_prob: float - Probability of having demand
+        progressive_stock_cost: bool - Progressive stock cost
+        kaggle: bool - Kaggle mode (True or False)
         """
 
         self.EP_LENGTH = EP_LENGTH  # Total length

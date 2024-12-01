@@ -126,15 +126,17 @@ def plot_safety_stock(df, safety_stock=None):
 
     # Compute safety stock for each node
     def compute_safety_stock(df):
-        safety_stock_list = []
+        safety_stock = []
         for node in df["Node"].unique():
             node_data = df[df["Node"] == node]
             safety_stock.append(node_data[node_data["Delivery"] > 0]["Stock"].mean())
 
-        return safety_stock_list
+        return safety_stock
 
     if safety_stock is not None:
         safety_stock = list(safety_stock.values())
+    else:
+        safety_stock = compute_safety_stock(df)
 
     # Loop over all nodes
     for i, node in enumerate(nodes):

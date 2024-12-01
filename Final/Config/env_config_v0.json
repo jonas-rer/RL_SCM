@@ -1,8 +1,8 @@
 {
     "stockout_cost": 200,
-    "order_cost": 20,
+    "order_cost": 30,
     "item_cost": 0.5,
-    "stock_cost": 0.05,
+    "stock_cost": 0.01,
     "item_prize": 10,
     "progressive_stock_cost": true,
     "stock_out_max": 1,
