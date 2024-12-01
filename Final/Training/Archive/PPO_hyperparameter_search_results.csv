@@ -1,0 +1,17 @@
+batch_size,clip_range,ent_coef,vf_coef,mean_reward,std_reward,model_path
+64,0.1,0.01,0.5,-17811577.294999998,3251457.2092676884,Training/Models/PPO/PPO_batch64_clip0.1_ent0.01_vf0.5.zip
+64,0.1,0.01,0.75,-22491121.66,2637087.761400954,Training/Models/PPO/PPO_batch64_clip0.1_ent0.01_vf0.75.zip
+64,0.1,0.02,0.5,-15089563.63,2920785.5558291674,Training/Models/PPO/PPO_batch64_clip0.1_ent0.02_vf0.5.zip
+64,0.1,0.02,0.75,-13097946.184999999,1810400.5779995373,Training/Models/PPO/PPO_batch64_clip0.1_ent0.02_vf0.75.zip
+64,0.2,0.01,0.5,-16907522.535,1836041.7144079348,Training/Models/PPO/PPO_batch64_clip0.2_ent0.01_vf0.5.zip
+64,0.2,0.01,0.75,-14624572.154999997,1097766.6817224498,Training/Models/PPO/PPO_batch64_clip0.2_ent0.01_vf0.75.zip
+64,0.2,0.02,0.5,-7107379.4350000005,1989193.0165828094,Training/Models/PPO/PPO_batch64_clip0.2_ent0.02_vf0.5.zip
+64,0.2,0.02,0.75,-14289658.4,965476.1262245105,Training/Models/PPO/PPO_batch64_clip0.2_ent0.02_vf0.75.zip
+256,0.1,0.01,0.5,-12930740.685000002,1775995.9936447332,Training/Models/PPO/PPO_batch256_clip0.1_ent0.01_vf0.5.zip
+256,0.1,0.01,0.75,-17372769.485,4548752.3940057,Training/Models/PPO/PPO_batch256_clip0.1_ent0.01_vf0.75.zip
+256,0.1,0.02,0.5,-10949019.204999998,2297540.014124118,Training/Models/PPO/PPO_batch256_clip0.1_ent0.02_vf0.5.zip
+256,0.1,0.02,0.75,-39295678.83,1465876.9602853262,Training/Models/PPO/PPO_batch256_clip0.1_ent0.02_vf0.75.zip
+256,0.2,0.01,0.5,-14140818.775,1583982.322781073,Training/Models/PPO/PPO_batch256_clip0.2_ent0.01_vf0.5.zip
+256,0.2,0.01,0.75,-4914499.779999999,4066041.8943886613,Training/Models/PPO/PPO_batch256_clip0.2_ent0.01_vf0.75.zip
+256,0.2,0.02,0.5,-18318318.924999997,1117455.4683132668,Training/Models/PPO/PPO_batch256_clip0.2_ent0.02_vf0.5.zip
+256,0.2,0.02,0.75,-28740558.939999998,1816293.398309314,Training/Models/PPO/PPO_batch256_clip0.2_ent0.02_vf0.75.zip

@@ -54,6 +54,7 @@ class SS_Mngmt_Env(Env):
         demand_noise=0,  # Mean noise in demand
         demand_noise_std=2,  # Standard deviation of noise in demand
         demand_prob=0.4,  # Probability of having demand
+        progressive_stock_cost=False,
     ):
         """
         Initialize the environment
@@ -99,6 +100,7 @@ class SS_Mngmt_Env(Env):
         self.stock_cost = stock_cost
         self.stock_out_max = stock_out_max
         self.item_prize = item_prize
+        self.progressive_stock_cost = progressive_stock_cost
 
         self.stock_out_counter = 0
 
@@ -131,6 +133,7 @@ class SS_Mngmt_Env(Env):
         #     }
         # )
 
+        max_lead_time = max([data["L"] for _, _, data in self.graph.edges(data=True)])
         self.observation_space = Dict(
             {
                 "inventory_levels": Box(
@@ -142,11 +145,31 @@ class SS_Mngmt_Env(Env):
                 "backlog_levels": Box(
                     low=0, high=1000, shape=(num_nodes,), dtype=np.float32
                 ),
-                "order_queue_status": Box(
-                    low=0, high=1000, shape=(num_nodes,), dtype=np.float32
+                "order_queues": Box(
+                    low=0, high=1000, shape=(num_nodes, max_lead_time), dtype=np.float32
+                ),
+                "lead_times": Box(
+                    low=1, high=max_lead_time, shape=(num_nodes,), dtype=np.int32
                 ),
             }
         )
+
+        # self.observation_space = Dict(
+        #     {
+        #         "inventory_levels": Box(
+        #             low=0, high=1000, shape=(num_nodes,), dtype=np.float32
+        #         ),
+        #         "current_demand": Box(
+        #             low=0, high=1000, shape=(num_nodes,), dtype=np.float32
+        #         ),
+        #         "backlog_levels": Box(
+        #             low=0, high=1000, shape=(num_nodes,), dtype=np.float32
+        #         ),
+        #         "order_queue_status": Box(
+        #             low=0, high=1000, shape=(num_nodes,), dtype=np.float32
+        #         ),
+        #     }
+        # )
 
         # Setting up the initial state
         self.demand_mean = demand_mean
@@ -278,12 +301,22 @@ class SS_Mngmt_Env(Env):
                 # Replenish order queue
                 self.order_queues[node].append(self.new_order[node_index])
 
-        # Compute the reward based on the order costs and stock level
-        reward -= np.sum(inventory_levels) * self.stock_cost
+        if self.progressive_stock_cost == False:
+            # Compute the reward based on the order costs and stock level
+            reward -= np.sum(inventory_levels) * self.stock_cost
+        elif self.progressive_stock_cost == True:
+            reward -= np.sum(
+                [
+                    self.quadratic_stock_cost(self.stock_cost, inv)
+                    for inv in inventory_levels
+                ]
+            )
 
         # Penalty if the episode cannot be completed
         if self.stock_out_counter >= self.stock_out_max:
-            reward -= (self.EP_LENGTH - self.episode_length) * self.stockout_cost * 10
+            reward -= (
+                self.episode_length * self.stockout_cost * (len(self.graph.nodes) - 2)
+            )
 
         # Update the reward
         self.total_reward += reward
@@ -317,19 +350,45 @@ class SS_Mngmt_Env(Env):
         #     # "actual_demand": self.current_demand,
         # }
 
+        # obs = {
+        #     "inventory_levels": self.inventory.astype(np.float32),
+        #     "current_demand": self.actual_demands[timestep].astype(np.float32),
+        #     "backlog_levels": np.array(
+        #         [len(queue) for queue in self.backlog_queues.values()], dtype=np.float32
+        #     ),
+        #     "order_queue_status": np.array(
+        #         [
+        #             sum(self.order_queues[node])
+        #             for node in self.graph.nodes
+        #             if node not in ["S", "D"]
+        #         ],
+        #         dtype=np.float32,
+        #     ),
+        # }
+
+        max_lead_time = max([data["L"] for _, _, data in self.graph.edges(data=True)])
         obs = {
             "inventory_levels": self.inventory.astype(np.float32),
             "current_demand": self.actual_demands[timestep].astype(np.float32),
             "backlog_levels": np.array(
                 [len(queue) for queue in self.backlog_queues.values()], dtype=np.float32
             ),
-            "order_queue_status": np.array(
+            "order_queues": np.array(
                 [
-                    sum(self.order_queues[node])
+                    list(self.order_queues[node])
+                    + [0] * (max_lead_time - len(self.order_queues[node]))
                     for node in self.graph.nodes
                     if node not in ["S", "D"]
                 ],
                 dtype=np.float32,
+            ),
+            "lead_times": np.array(
+                [
+                    len(self.order_queues[node])
+                    for node in self.graph.nodes
+                    if node not in ["S", "D"]
+                ],
+                dtype=np.int32,
             ),
         }
 
@@ -362,6 +421,17 @@ class SS_Mngmt_Env(Env):
         truncated = False
 
         return obs, float(reward), done, truncated, info
+
+    def quadratic_stock_cost(self, stock_cost, inventory_level):
+        """
+        Quadratic stock cost function.
+        """
+        return stock_cost * (inventory_level**2)  # Quadratic cost
+
+    def reward_function(self):
+        # TODO - Implement a custom reward function
+
+        return 0
 
     def render(self):
         # Just check episode lenghth and only plot the last one when using matplotlib
@@ -665,19 +735,45 @@ class SS_Mngmt_Env(Env):
         #     # "actual_demand": self.current_demand,
         # }
 
+        # obs = {
+        #     "inventory_levels": self.inventory.astype(np.float32),
+        #     "current_demand": self.current_demand.astype(np.float32),
+        #     "backlog_levels": np.array(
+        #         [len(queue) for queue in self.backlog_queues.values()], dtype=np.float32
+        #     ),
+        #     "order_queue_status": np.array(
+        #         [
+        #             sum(self.order_queues[node])
+        #             for node in self.graph.nodes
+        #             if node not in ["S", "D"]
+        #         ],
+        #         dtype=np.float32,
+        #     ),
+        # }
+
+        max_lead_time = max([data["L"] for _, _, data in self.graph.edges(data=True)])
         obs = {
             "inventory_levels": self.inventory.astype(np.float32),
-            "current_demand": self.current_demand.astype(np.float32),
+            "current_demand": self.actual_demands[0].astype(np.float32),
             "backlog_levels": np.array(
                 [len(queue) for queue in self.backlog_queues.values()], dtype=np.float32
             ),
-            "order_queue_status": np.array(
+            "order_queues": np.array(
                 [
-                    sum(self.order_queues[node])
+                    list(self.order_queues[node])
+                    + [0] * (max_lead_time - len(self.order_queues[node]))
                     for node in self.graph.nodes
                     if node not in ["S", "D"]
                 ],
                 dtype=np.float32,
+            ),
+            "lead_times": np.array(
+                [
+                    len(self.order_queues[node])
+                    for node in self.graph.nodes
+                    if node not in ["S", "D"]
+                ],
+                dtype=np.int32,
             ),
         }
 
