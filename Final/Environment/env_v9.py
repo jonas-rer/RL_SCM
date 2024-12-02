@@ -12,6 +12,7 @@ import pandas as pd
 import random
 import os
 import json
+import csv
 import matplotlib.pyplot as plt
 import seaborn as sns
 from datetime import datetime
@@ -86,6 +87,27 @@ class SS_Mngmt_Env(Env):
 
         self.model_type = model_type
 
+        # Set the data path
+        now = datetime.now()
+        self.data_path = (
+            f'./Data/{now.strftime("%Y-%m-%d")}_environment_data_{self.model_type}.csv'
+        )
+
+        # Set the fieldnames for the CSV file
+        self.fieldnames = [
+            "Time",
+            "Node",
+            "Stock",
+            "Action",
+            "Demand",
+            "Delivery",
+            "Reward",
+            "Total Reward",
+            "Backlog",
+        ]
+
+        self.file_initialized = False
+
         # Seting up the network
         self.network_config = network_config
         self.graph = nx.DiGraph()
@@ -121,21 +143,6 @@ class SS_Mngmt_Env(Env):
         action_choices = np.full(n_nodes, n_actions)
         self.action_space = MultiDiscrete(action_choices)
 
-        # Define the observation space
-        # self.observation_space = Dict(
-        #     {
-        #         "inventory_levels": Box(
-        #             low=0, high=1000, shape=(num_nodes,), dtype=np.float32
-        #         ),
-        #         # "planned_demand": Box(
-        #         #     low=0, high=30, shape=(self.EP_LENGTH, num_nodes), dtype=np.float32
-        #         # ),
-        #         # "actual_demand": Box(
-        #         #     low=0, high=30, shape=(num_nodes,), dtype=np.float32
-        #         # ),
-        #     }
-        # )
-
         max_lead_time = max([data["L"] for _, _, data in self.graph.edges(data=True)])
         self.observation_space = Dict(
             {
@@ -156,23 +163,6 @@ class SS_Mngmt_Env(Env):
                 ),
             }
         )
-
-        # self.observation_space = Dict(
-        #     {
-        #         "inventory_levels": Box(
-        #             low=0, high=1000, shape=(num_nodes,), dtype=np.float32
-        #         ),
-        #         "current_demand": Box(
-        #             low=0, high=1000, shape=(num_nodes,), dtype=np.float32
-        #         ),
-        #         "backlog_levels": Box(
-        #             low=0, high=1000, shape=(num_nodes,), dtype=np.float32
-        #         ),
-        #         "order_queue_status": Box(
-        #             low=0, high=1000, shape=(num_nodes,), dtype=np.float32
-        #         ),
-        #     }
-        # )
 
         # Setting up the initial state
         self.demand_mean = demand_mean
@@ -195,9 +185,6 @@ class SS_Mngmt_Env(Env):
                 initial_inventories.append(self.graph.nodes[node].get("I", 0))
 
         initial_inventories = np.array(initial_inventories, dtype=np.float32).flatten()
-        # initial_inventories = initial_inventories.reshape(
-        #     1, initial_inventories.shape[0]
-        # )
 
         self.state = {
             "inventory_levels": initial_inventories.astype(np.float32),
@@ -211,12 +198,7 @@ class SS_Mngmt_Env(Env):
         # Prep to save the data
         self.inventory = initial_inventories
         self.stock_history = [self.inventory.tolist()]
-        self.action_history = [np.zeros(num_nodes)]
-        self.demand_history = [np.zeros(num_nodes)]
-        self.delivery_history = [np.zeros(num_nodes)]
-        self.backlog_history = [[False, False, False]]
         self.reward_history = [np.sum(initial_inventories * self.stock_cost * -1)]
-        self.total_reward_history = [np.sum(initial_inventories * self.stock_cost * -1)]
 
         # Kaggle mode
         self.kaggle = kaggle
@@ -333,13 +315,6 @@ class SS_Mngmt_Env(Env):
         inventory_levels = inventory_levels.flatten()
         self.inventory = inventory_levels
 
-        # Update the state
-        # self.state = {
-        #     "inventory_levels": inventory_levels.astype(np.float32),
-        #     "planned_demand": self.planned_demands,
-        #     "actual_demand": self.current_demand,
-        # }
-
         self.state = {
             "inventory_levels": inventory_levels.astype(np.float32),
             "planned_demand": self.planned_demands,
@@ -348,29 +323,6 @@ class SS_Mngmt_Env(Env):
             "backlog_levels": self.backlog_queues,
             "order_queue_status": self.order_queues,
         }
-
-        # Update the observation space
-        # obs = {
-        #     "inventory_levels": self.inventory.astype(np.float32),
-        #     # "planned_demand": self.planned_demands,
-        #     # "actual_demand": self.current_demand,
-        # }
-
-        # obs = {
-        #     "inventory_levels": self.inventory.astype(np.float32),
-        #     "current_demand": self.actual_demands[timestep].astype(np.float32),
-        #     "backlog_levels": np.array(
-        #         [len(queue) for queue in self.backlog_queues.values()], dtype=np.float32
-        #     ),
-        #     "order_queue_status": np.array(
-        #         [
-        #             sum(self.order_queues[node])
-        #             for node in self.graph.nodes
-        #             if node not in ["S", "D"]
-        #         ],
-        #         dtype=np.float32,
-        #     ),
-        # }
 
         max_lead_time = max([data["L"] for _, _, data in self.graph.edges(data=True)])
         obs = {
@@ -400,34 +352,19 @@ class SS_Mngmt_Env(Env):
 
         # Update the history data
         self.reward_history.append(reward)
-        self.total_reward_history.append(self.total_reward)
         self.stock_history.append(list(self.inventory))
-        self.demand_history.append(self.current_demand)
-        self.action_history.append(self.new_order)
-        self.delivery_history.append(self.orders)
-        self.backlog_history.append(
-            [len(queue) > 0 for queue in self.backlog_queues.values()]
-        )
+
+        self.log_step_data(timestep, action, reward)
 
         # Check if the episode is done
         done = self.episode_length == 0
 
         # Check if episode is done
-        if self.stock_out_counter >= self.stock_out_max and self.kaggle == False:
-
-            # Save the data
-            now = datetime.now()
-            path = f'./Data/{now.strftime("%Y-%m-%d")}_last_environment_data_{self.model_type}.csv'
-            self.save_data(path)
+        if self.stock_out_counter >= self.stock_out_max:
 
             done = True
 
-        elif self.episode_length <= 0 and self.kaggle == False:
-
-            # Save the data
-            now = datetime.now()
-            path = f'./Data/{now.strftime("%Y-%m-%d")}_last_environment_data_{self.model_type}.csv'
-            self.save_data(path)
+        elif self.episode_length <= 0:
 
             done = True
 
@@ -449,6 +386,33 @@ class SS_Mngmt_Env(Env):
         """
         return stock_cost * (inventory_level**2)  # Quadratic cost
 
+    def log_step_data(self, timestep, action, reward):
+
+        if not self.file_initialized:
+            with open(self.data_path, "w", newline="") as csvfile:
+                writer = csv.DictWriter(csvfile, fieldnames=self.fieldnames)
+                writer.writeheader()
+            self.file_initialized = True  # Mark as initialized
+
+        for n in range(len(self.inventory)):
+            node_name = self.get_node_name(n)
+            row = {
+                "Time": timestep + 1,
+                "Node": node_name,
+                "Stock": self.inventory[n],
+                "Action": self.new_order[n],
+                "Demand": self.current_demand[n],
+                "Delivery": self.orders[n],
+                "Reward": reward,
+                "Total Reward": self.total_reward,
+                "Backlog": len(self.backlog_queues[node_name]) > 0,
+            }
+
+            # Append the row to the CSV file
+            with open(self.data_path, "a", newline="") as csvfile:
+                writer = csv.DictWriter(csvfile, fieldnames=self.fieldnames)
+                writer.writerow(row)
+
     def reward_function(self):
         # TODO - Implement a custom reward function
 
@@ -463,6 +427,7 @@ class SS_Mngmt_Env(Env):
     def render_human(self):
         """
         Renders the environment in human mode.
+        Useful for debugging and visualization.
         """
 
         print("*" * 50)
@@ -499,40 +464,6 @@ class SS_Mngmt_Env(Env):
         print("\nStockout Counter: ", self.stock_out_counter)
 
         return
-
-    def save_data(self, path):
-        """
-        Saves the history data to a CSV file.
-        """
-
-        # print(
-        #     f"Lengths - stock: {len(self.stock_history)}, action: {len(self.action_history)}, "
-        #     f"demand: {len(self.demand_history)}, delivery: {len(self.delivery_history)}, "
-        #     f"reward: {len(self.reward_history)}, backlog: {len(self.backlog_history)}"
-        # )
-
-        data = []
-
-        for t in range(len(self.stock_history)):
-            for n in range(len(self.stock_history[t])):
-                row = {
-                    "Time": t + 1,
-                    "Node": self.get_node_name(n),
-                    "Stock": self.stock_history[t][n],
-                    "Action": self.action_history[t][n],
-                    "Demand": self.demand_history[t][n],
-                    "Delivery": self.delivery_history[t][n],
-                    "Reward": self.reward_history[t],
-                    "Total Reward": self.total_reward_history[t],
-                    "Backlog": self.backlog_history[t][n],
-                }
-                data.append(row)
-
-        df = pd.DataFrame(data)
-
-        df.to_csv(path, index=False)
-
-        # print(f"Data saved to {path}")
 
     def setup_network(self, network_config=None):
         """
@@ -592,8 +523,6 @@ class SS_Mngmt_Env(Env):
         """
         Generates planned demand for each edge in the network over the whole episode.
         """
-        # Generates a random planned demand for each edge in the network
-        # over the whole episode. The demand is drawn from a normal distribution
 
         edges_leading_to_D = [edge for edge in self.graph.edges if edge[1] == "D"]
 
@@ -639,9 +568,24 @@ class SS_Mngmt_Env(Env):
         Generates a random actual demand for each edge in the network based on the planned demand from the current timestep.
         """
 
-        # Generate a random actual demand for each edge in the network
-        # based on the planned demand from the current timestep. The demand
-        # is drawn from a normal distribution
+        actual_demand = np.copy(planned_demand)
+
+        for i in range(actual_demand.shape[0]):
+            for j in range(actual_demand.shape[1]):
+                # Add a small random noise to the planned demand
+                if planned_demand[i, j] > 0:
+                    noise = np.random.normal(demand_noise, demand_noise_std)
+                    # Ensure actual demand is not less than 0
+                    actual_demand[i, j] = int(max(0, actual_demand[i, j] + noise))
+
+        return actual_demand
+
+    def actual_demand_extremes(self, planned_demand, demand_noise_std, demand_noise):
+        """
+        Generates a random actual demand for each edge in the network based on the planned demand from the current timestep.
+        The to create a more interesting scenario the demand is multiplied by a random factor every now and then.
+        """
+
         actual_demand = np.copy(planned_demand)
 
         for i in range(actual_demand.shape[0]):
@@ -690,6 +634,38 @@ class SS_Mngmt_Env(Env):
 
         return backlog_queues
 
+    def save_state(self):
+        """
+        Saves the current state of the environment.
+        Used for greedy algorithm.
+        """
+
+        return {
+            "episode_length": self.episode_length,
+            "inventory": np.copy(self.inventory),
+            "total_reward": self.total_reward,
+            "state": self.state,
+            "order_queues": {k: deque(v) for k, v in self.order_queues.items()},
+            "backlog_queues": {k: deque(v) for k, v in self.backlog_queues.items()},
+        }
+
+    def load_state(self, saved_state):
+        """
+        Loads the state of the environment.
+        Used for greedy algorithm.
+        """
+
+        self.episode_length = saved_state["episode_length"]
+        self.inventory = saved_state["inventory"]
+        self.total_reward = saved_state["total_reward"]
+        self.state = saved_state["state"]
+        self.order_queues = {
+            k: deque(v) for k, v in saved_state["order_queues"].items()
+        }
+        self.backlog_queues = {
+            k: deque(v) for k, v in saved_state["backlog_queues"].items()
+        }
+
     def reset(self, seed=None):
         """
         Resets the environment to the initial state.
@@ -700,6 +676,8 @@ class SS_Mngmt_Env(Env):
 
         # Reset the episode length
         self.episode_length = self.EP_LENGTH
+
+        self.file_initialized = False
 
         self.total_reward = 0
 
@@ -741,28 +719,6 @@ class SS_Mngmt_Env(Env):
             "actual_demand": self.current_demand,
         }
 
-        # obs = {
-        #     "inventory_levels": initial_inventories,
-        #     # "planned_demand": self.planned_demands,
-        #     # "actual_demand": self.current_demand,
-        # }
-
-        # obs = {
-        #     "inventory_levels": self.inventory.astype(np.float32),
-        #     "current_demand": self.current_demand.astype(np.float32),
-        #     "backlog_levels": np.array(
-        #         [len(queue) for queue in self.backlog_queues.values()], dtype=np.float32
-        #     ),
-        #     "order_queue_status": np.array(
-        #         [
-        #             sum(self.order_queues[node])
-        #             for node in self.graph.nodes
-        #             if node not in ["S", "D"]
-        #         ],
-        #         dtype=np.float32,
-        #     ),
-        # }
-
         max_lead_time = max([data["L"] for _, _, data in self.graph.edges(data=True)])
         obs = {
             "inventory_levels": self.inventory.astype(np.float32),
@@ -792,12 +748,7 @@ class SS_Mngmt_Env(Env):
         # Resetting history data
         self.inventory = initial_inventories
         self.stock_history = [self.inventory.tolist()]
-        self.action_history = [np.zeros(num_nodes)]
-        self.demand_history = [np.zeros(num_nodes)]
-        self.delivery_history = [np.zeros(num_nodes)]
-        self.backlog_history = [[False, False, False]]
         self.reward_history = [np.sum(initial_inventories * self.stock_cost * -1)]
-        self.total_reward_history = [np.sum(initial_inventories * self.stock_cost * -1)]
 
         # Placeholder for info
         info = {}
