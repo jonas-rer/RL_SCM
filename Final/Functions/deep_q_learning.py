@@ -6,6 +6,19 @@ import random
 from collections import deque
 
 
+# Function to flatten the Dict observation space
+def flatten_observation(observation):
+    return np.concatenate(
+        [
+            observation["inventory_levels"],
+            observation["current_demand"],
+            observation["backlog_levels"],
+            observation["order_queues"].flatten(),
+            observation["lead_times"],
+        ]
+    )
+
+
 def create_q_network(state_size, action_sizes, learning_rate=0.001):
     # Use Keras functional API for multi-output model
     inputs = layers.Input(shape=(state_size,))
@@ -38,9 +51,9 @@ def deep_q_learning(
     memory_size=10000,
     model_save_path="q_network_model",
 ):
-    state_size = env.observation_space.shape[
-        0
-    ]  # For continuous state spaces # env.observation_space.n for discrete
+    # Flatten the state space to determine the size of input to the Q-network
+    sample_observation, _ = env.reset()
+    state_size = len(flatten_observation(sample_observation))
     action_sizes = env.action_space.nvec  # For MultiDiscrete action spaces
 
     q_network = create_q_network(state_size, action_sizes, learning_rate)
@@ -49,9 +62,8 @@ def deep_q_learning(
     exploration_rates = []
 
     for episode in range(num_episodes):
-        state = env.reset()
-        if isinstance(state, tuple):  # Handle tuple return type if necessary
-            state = state[0]
+        state, _ = env.reset()  # Reset the environment
+        state = flatten_observation(state)  # Flatten the observation
         state = np.reshape(state, [1, state_size])  # Reshape for network input
 
         done = False
@@ -62,16 +74,13 @@ def deep_q_learning(
             exploration_rate_threshold = np.random.uniform(0, 1)
             if exploration_rate_threshold > exploration_rate:
                 q_values = q_network.predict(state)
-                action = [
-                    np.argmax(q) for q in q_values
-                ]  # Choose the best action for each part
+                action = [np.argmax(q) for q in q_values]
             else:
-                action = [
-                    np.random.choice(action_size) for action_size in action_sizes
-                ]  # Random action for each part
+                action = [np.random.choice(action_size) for action_size in action_sizes]
 
             # Take action and observe the new state and reward
-            new_state, reward, done, *_ = env.step(action)
+            new_state, reward, done, truncated, _ = env.step(action)
+            new_state = flatten_observation(new_state)  # Flatten the observation
             new_state = np.reshape(new_state, [1, state_size])
 
             # Store experience in memory
@@ -97,9 +106,7 @@ def deep_q_learning(
                 # Compute target Q-values
                 targets = [q.copy() for q in q_values]
                 for i in range(batch_size):
-                    for j in range(
-                        len(action_sizes)
-                    ):  # Iterate over each component in MultiDiscrete space
+                    for j in range(len(action_sizes)):  # Iterate over each action space
                         target_q_value = rewards[i]
                         if not dones[i]:
                             target_q_value += discount_rate * np.max(

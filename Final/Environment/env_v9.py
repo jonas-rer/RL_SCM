@@ -666,7 +666,7 @@ class SS_Mngmt_Env(Env):
             k: deque(v) for k, v in saved_state["backlog_queues"].items()
         }
 
-    def reset(self, seed=None):
+    def reset(self, seed=None, options=None):
         """
         Resets the environment to the initial state.
         """
@@ -754,3 +754,34 @@ class SS_Mngmt_Env(Env):
         info = {}
 
         return obs, info
+
+
+class MultiDiscreteToBoxWrapper(gym.ActionWrapper):
+    """
+    Converts a MultiDiscrete action space to a Box action space.
+    """
+
+    def __init__(self, env):
+        super().__init__(env)
+        assert isinstance(
+            env.action_space, MultiDiscrete
+        ), "Environment must have a MultiDiscrete action space."
+        self.original_action_space = env.action_space
+        self.action_space = Box(
+            low=0.0,
+            high=1.0,
+            shape=self.original_action_space.nvec.shape,
+            dtype=np.float32,
+        )
+
+    def action(self, action):
+        # Convert continuous action (Box) back to discrete (MultiDiscrete)
+        discrete_action = np.round(
+            action * (self.original_action_space.nvec - 1)
+        ).astype(int)
+        return discrete_action
+
+    def reverse_action(self, action):
+        # Optionally: Map discrete actions back to normalized (Box)
+        normalized_action = action / (self.original_action_space.nvec - 1)
+        return normalized_action
