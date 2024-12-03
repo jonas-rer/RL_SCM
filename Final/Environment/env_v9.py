@@ -58,6 +58,8 @@ class SS_Mngmt_Env(Env):
         intermediate_reward=1000,  # Intermediate reward
         progressive_stock_cost=False,  # Progressive stock cost
         kaggle=False,  # Kaggle mode (True or False)
+        extreme=False,  # Extreme mode (True or False)
+        seasonality=False,  # Seasonality mode (True or False)
     ):
         """
         Initialize the environment
@@ -172,13 +174,32 @@ class SS_Mngmt_Env(Env):
         self.demand_noise = demand_noise
         self.demand_noise_std = demand_noise_std
         self.demand_prob = demand_prob
+        self.extreme = extreme
+        self.seasonality = seasonality
 
-        self.planned_demands = self.planned_demand(
-            self.demand_mean, self.demand_std, self.demand_prob
-        )
-        self.actual_demands = self.actual_demand(
-            self.planned_demands, self.demand_noise_std, self.demand_noise
-        )
+        if self.seasonality == True:
+
+            self.planned_demands = self.planned_demand_seasonality(
+                self.demand_mean, self.demand_std, self.demand_prob
+            )
+
+        else:
+
+            self.planned_demands = self.planned_demand(
+                self.demand_mean, self.demand_std, self.demand_prob
+            )
+
+        if self.extreme == True:
+
+            self.actual_demands = self.actual_demand_extremes(
+                self.planned_demands, self.demand_noise_std, self.demand_noise
+            )
+
+        else:
+
+            self.actual_demands = self.actual_demand(
+                self.planned_demands, self.demand_noise_std, self.demand_noise
+            )
 
         # Collect initial inventories from the graph
         initial_inventories = []
@@ -331,6 +352,7 @@ class SS_Mngmt_Env(Env):
         }
 
         max_lead_time = max([data["L"] for _, _, data in self.graph.edges(data=True)])
+
         obs = {
             "inventory_levels": self.inventory.astype(np.float32),
             "current_demand": self.actual_demands[timestep].astype(np.float32),
@@ -544,7 +566,52 @@ class SS_Mngmt_Env(Env):
 
         return planned_demand
 
-    def planned_demand_even(self, demand_mean, demand_std):
+    import numpy as np
+
+    def planned_demand_seasonality(
+        self,
+        demand_mean=10,
+        demand_std=2,
+        demand_prob=0.8,
+        season_length=50,
+        seasonality_strength=0.8,
+    ):
+        """
+        Generates planned demand for each edge in the network over the whole episode,
+        incorporating seasonality into the demand pattern.
+
+        Parameters:
+        - demand_mean: Mean of the demand.
+        - demand_std: Standard deviation of the demand.
+        - demand_prob: Probability of demand occurring.
+        - season_length: Length of the seasonal cycle.
+
+        Returns:
+        - planned_demand: 2D array of planned demand with seasonality.
+        """
+
+        edges_leading_to_D = [edge for edge in self.graph.edges if edge[1] == "D"]
+
+        planned_demand = np.zeros((self.EP_LENGTH, len(edges_leading_to_D)))
+
+        # Generate seasonality factors for the episode length
+        seasonality_factors = 1 + seasonality_strength * np.sin(
+            2 * np.pi * np.arange(self.EP_LENGTH) / season_length
+        )
+
+        for i, edge in enumerate(edges_leading_to_D):
+            for j in range(self.EP_LENGTH):
+                # Introduce a probability of having demand
+                if np.random.rand() < demand_prob:
+                    # Apply seasonality to the mean demand
+                    seasonal_mean = demand_mean * seasonality_factors[j]
+                    planned_demand[j, i] = int(
+                        np.random.normal(seasonal_mean, demand_std)
+                    )
+
+        return planned_demand
+
+    def planned_demand_even(self, demand_mean=10, demand_std=2):
         """
         Generates planned demand for each edge in the network over the whole episode.
         The demand is distributed evenly, occurring only at fixed intervals (e.g., every fifth timestep).
@@ -569,7 +636,7 @@ class SS_Mngmt_Env(Env):
 
         return planned_demand
 
-    def actual_demand(self, planned_demand, demand_noise_std, demand_noise):
+    def actual_demand(self, planned_demand, demand_noise_std=2, demand_noise=2):
         """
         Generates a random actual demand for each edge in the network based on the planned demand from the current timestep.
         """
@@ -586,21 +653,40 @@ class SS_Mngmt_Env(Env):
 
         return actual_demand
 
-    def actual_demand_extremes(self, planned_demand, demand_noise_std, demand_noise):
+    def actual_demand_extremes(
+        self,
+        planned_demand,
+        demand_noise_std=2,
+        demand_noise=2,
+        n_multiplications=[3, 6],
+        size_multiplier=[3, 4],
+    ):
         """
         Generates a random actual demand for each edge in the network based on the planned demand from the current timestep.
-        The to create a more interesting scenario the demand is multiplied by a random factor every now and then.
+        To create a more interesting scenario, the demand is multiplied by a random factor 3-5 times over the whole demand.
         """
-
         actual_demand = np.copy(planned_demand)
 
+        # Add random noise to planned demand
         for i in range(actual_demand.shape[0]):
             for j in range(actual_demand.shape[1]):
-                # Add a small random noise to the planned demand
                 if planned_demand[i, j] > 0:
                     noise = np.random.normal(demand_noise, demand_noise_std)
-                    # Ensure actual demand is not less than 0
                     actual_demand[i, j] = int(max(0, actual_demand[i, j] + noise))
+
+        # Multiply demand by a random factor 3-5 times
+        num_multiplications = np.random.randint(
+            n_multiplications[0], n_multiplications[1]
+        )  # Randomly select between 3 and 5
+        for _ in range(num_multiplications):
+            # Select random indices
+            i = np.random.randint(0, actual_demand.shape[0])
+            j = np.random.randint(0, actual_demand.shape[1])
+
+            # Apply a random multiplier
+            if planned_demand[i, j] > 0:
+                multiplier = np.random.uniform(size_multiplier[0], size_multiplier[1])
+                actual_demand[i, j] = int(actual_demand[i, j] * multiplier)
 
         return actual_demand
 
@@ -700,13 +786,30 @@ class SS_Mngmt_Env(Env):
         self.stock_out_counter = 0
 
         # Define the initial state
-        self.planned_demands = self.planned_demand(
-            self.demand_mean, self.demand_std, self.demand_prob
-        ).astype(np.float32)
 
-        self.actual_demands = self.actual_demand(
-            self.planned_demands, self.demand_noise_std, self.demand_noise
-        ).astype(np.float32)
+        if self.seasonality == True:
+
+            self.planned_demands = self.planned_demand_seasonality(
+                self.demand_mean, self.demand_std, self.demand_prob
+            )
+
+        else:
+
+            self.planned_demands = self.planned_demand(
+                self.demand_mean, self.demand_std, self.demand_prob
+            )
+
+        if self.extreme == True:
+
+            self.actual_demands = self.actual_demand_extremes(
+                self.planned_demands, self.demand_noise_std, self.demand_noise
+            ).astype(np.float32)
+
+        else:
+
+            self.actual_demands = self.actual_demand(
+                self.planned_demands, self.demand_noise_std, self.demand_noise
+            ).astype(np.float32)
 
         self.current_demand = self.actual_demands[0].astype(np.float32)
 
