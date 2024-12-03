@@ -220,6 +220,7 @@ def benchmark_plot(dataframes, labels):
         )
     axs[0].set_title("Reward over Time")
     axs[0].legend()
+    axs[0].set_yscale("log")
 
     # Plot the 'Total Reward' over time
     for i, (df, label) in enumerate(zip(dataframes, labels)):
@@ -231,6 +232,7 @@ def benchmark_plot(dataframes, labels):
         )
     axs[1].set_title("Total Reward over Time")
     axs[1].legend()
+    axs[1].set_yscale("log")
 
     # Plot stockouts (backlog) over time
     for i, (df, label) in enumerate(zip(dataframes, labels)):

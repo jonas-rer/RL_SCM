@@ -55,6 +55,7 @@ class SS_Mngmt_Env(Env):
         demand_noise=0,  # Mean noise in demand
         demand_noise_std=2,  # Standard deviation of noise in demand
         demand_prob=0.4,  # Probability of having demand
+        intermediate_reward=1000,  # Intermediate reward
         progressive_stock_cost=False,  # Progressive stock cost
         kaggle=False,  # Kaggle mode (True or False)
     ):
@@ -82,6 +83,7 @@ class SS_Mngmt_Env(Env):
 
         self.EP_LENGTH = EP_LENGTH  # Total length
         self.episode_length = EP_LENGTH  # Current length of the episode
+        self.intermediate_reward = intermediate_reward  # Intermediate reward
 
         self.total_reward = 0
 
@@ -305,6 +307,10 @@ class SS_Mngmt_Env(Env):
             reward -= (
                 self.episode_length * self.stockout_cost * (len(self.graph.nodes) - 2)
             )
+
+        # Intermediate reward
+        if timestep % 2 == 0:
+            reward += self.intermediate_reward
 
         # Update the reward
         self.total_reward += reward
