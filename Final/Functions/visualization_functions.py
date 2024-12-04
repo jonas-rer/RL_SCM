@@ -193,7 +193,6 @@ def plot_safety_stock(df, safety_stock=None):
         axs[i].legend()
 
 
-# TODO check if this works as expected
 # Function to compare results of different runs
 def benchmark_plot(dataframes, labels):
     """
@@ -214,13 +213,20 @@ def benchmark_plot(dataframes, labels):
     )  # Adjusted for three metrics (Reward, Total Reward, Stockouts)
 
     # Plot the 'Reward' over time
+    # for i, (df, label) in enumerate(zip(dataframes, labels)):
+    #     axs[0].plot(
+    #         df["Time"], df["Reward"], label=f"{label} - Reward", color=colors[i]
+    #     )
+    # axs[0].set_title("Reward over Time")
+    # axs[0].legend()
+
     for i, (df, label) in enumerate(zip(dataframes, labels)):
+        smoothed_reward = smooth(df["Reward"], window_size=80)
         axs[0].plot(
-            df["Time"], df["Reward"], label=f"{label} - Reward", color=colors[i]
+            df["Time"], smoothed_reward, label=f"{label} - Reward", color=colors[i]
         )
     axs[0].set_title("Reward over Time")
     axs[0].legend()
-    axs[0].set_yscale("log")
 
     # Plot the 'Total Reward' over time
     for i, (df, label) in enumerate(zip(dataframes, labels)):
@@ -232,7 +238,7 @@ def benchmark_plot(dataframes, labels):
         )
     axs[1].set_title("Total Reward over Time")
     axs[1].legend()
-    axs[1].set_yscale("log")
+    # axs[1].set_yscale("log")
 
     # Plot stockouts (backlog) over time
     for i, (df, label) in enumerate(zip(dataframes, labels)):
@@ -251,3 +257,8 @@ def benchmark_plot(dataframes, labels):
 
     # Show the plot
     plt.show()
+
+
+# Define a smoothing function for improved visualization and interpretation
+def smooth(data, window_size):
+    return data.rolling(window=window_size, center=True).mean()

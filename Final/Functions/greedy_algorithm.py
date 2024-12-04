@@ -1,60 +1,66 @@
 import numpy as np
 
 
-# def greedy_algorithm(env, num_episodes, episode_length):
-#     total_rewards = []
+def greedy_algorithm(env, num_episodes, episode_length):
+    """
+    Greedy algorithm that selects the best action based on immediate rewards.
+    """
 
-#     for episode in range(num_episodes):
-#         state, info = env.reset()  # Unpack the reset tuple
+    total_rewards = []
 
-#         episode_reward = 0
-#         done = False
+    for episode in range(num_episodes):
+        state, info = env.reset()
+        episode_reward = 0
 
-#         for step in range(episode_length):
-#             # Save the current state to restore later
-#             saved_state = env.save_state()
+        try:
+            for step in range(episode_length):
+                best_action = None
+                best_score = float("-inf")
 
-#             rewards_for_actions = []
-#             actions = []
+                # Evaluate all possible actions
+                for action in np.ndindex(*env.action_space.nvec):
+                    env.load_state(
+                        env.save_state()
+                    )  # Save and restore state for evaluation
 
-#             # Generate all possible actions for the multidiscrete action space
-#             for action in np.ndindex(*env.action_space.nvec):
-#                 env.load_state(saved_state)  # Restore the environment state
-#                 _, reward, _, _, _ = env.step(action)  # Simulate the action
-#                 rewards_for_actions.append(reward)
-#                 actions.append(action)
+                    try:
+                        _, immediate_reward, done, _, _ = env.step(action)
+                    except IndexError:
+                        # Handle invalid timestep error
+                        immediate_reward = -float("inf")  # Penalize invalid actions
+                        done = True  # End evaluation for this action
 
-#             future_rewards = [
-#                 lookahead(env, state, depth=3)
-#                 for action in np.ndindex(*env.action_space.nvec)
-#             ]
+                    if immediate_reward > best_score:
+                        best_score = immediate_reward
+                        best_action = action
 
-#             # Choose the action with the highest immediate reward
-#             # best_action_index = np.argmax(rewards_for_actions)
-#             best_action_index = np.argmax(future_rewards)
-#             # best_action_index = np.argmax(mc_rewards)
-#             best_action = actions[best_action_index]
+                # Take the best action in the main environment
+                state, reward, done, _, _ = env.step(best_action)
+                episode_reward += reward
 
-#             # Take the best action in the main environment
-#             state, reward, done, _, _ = env.step(best_action)
-#             episode_reward += reward
+                if done:
+                    break
 
-#             if done:
-#                 break
+        except IndexError as e:
+            # Handle unexpected environment errors
+            print(f"Encountered IndexError: {e}")
+            break
 
-#             # env.render()
+        total_rewards.append(episode_reward)
 
-#         total_rewards.append(episode_reward)
+    avg_reward = sum(total_rewards) / num_episodes
+    print(f"Average reward over {num_episodes} episodes: {avg_reward}")
 
-#     avg_reward = sum(total_rewards) / num_episodes
-#     print(f"Average reward over {num_episodes} episodes: {avg_reward}")
-
-#     return total_rewards
+    return total_rewards
 
 
-def greedy_algorithm(
+def greedy_algorithm_lookahead(
     env, num_episodes, episode_length, lookahead_depth=3, discount_factor=0.9
 ):
+    """
+    Greedy algorithm with lookahead to evaluate future rewards.
+    """
+
     total_rewards = []
 
     for episode in range(num_episodes):
@@ -122,12 +128,95 @@ def lookahead(env, state, depth, discount_factor=0.9):
     return best_reward
 
 
-# TODO - Implement Monte Carlo simulation
+def monte_carlo_agent(
+    env,
+    num_episodes,
+    episode_length,
+    lookahead_depth=3,
+    discount_factor=0.9,
+    num_rollouts=10,
+    rollout_length=5,
+):
+    """
+    Run an agent in the environment using Monte Carlo lookahead for decision-making.
+    """
+    total_rewards = []
 
-# mc_rewards = [
-#     monte_carlo_simulation(env, state, action)
-#     for action in np.ndindex(*env.action_space.nvec)
-# ]
+    for episode in range(num_episodes):
+        state, info = env.reset()
+        episode_reward = 0
+
+        for step in range(episode_length):
+            saved_state = env.save_state()
+            best_action = None
+            best_score = float("-inf")
+
+            for action in np.ndindex(*env.action_space.nvec):
+                env.load_state(saved_state)
+                _, immediate_reward, done, _, _ = env.step(action)
+
+                if done:
+                    future_reward = immediate_reward
+                else:
+                    future_reward = lookahead_with_monte_carlo(
+                        env,
+                        state,
+                        lookahead_depth,
+                        discount_factor,
+                        num_rollouts,
+                        rollout_length,
+                    )
+                    total_score = immediate_reward + discount_factor * future_reward
+
+                if total_score > best_score:
+                    best_score = total_score
+                    best_action = action
+
+            # Take the best action in the actual environment
+            state, reward, done, _, _ = env.step(best_action)
+            episode_reward += reward
+
+            if done:
+                break
+
+        total_rewards.append(episode_reward)
+        print(f"Episode {episode + 1}/{num_episodes} reward: {episode_reward}")
+
+    avg_reward = sum(total_rewards) / num_episodes
+    print(f"Average reward over {num_episodes} episodes: {avg_reward}")
+
+    return total_rewards
+
+
+def lookahead_with_monte_carlo(
+    env, state, depth, discount_factor, num_rollouts=10, rollout_length=5
+):
+    """
+    Lookahead function using Monte Carlo simulations to estimate future rewards.
+    """
+    if depth == 0:
+        return 0  # No future reward beyond the depth
+
+    saved_state = env.save_state()
+    best_future_reward = float("-inf")
+
+    for action in np.ndindex(*env.action_space.nvec):
+        env.load_state(saved_state)
+        _, immediate_reward, done, _, _ = env.step(action)
+
+        if done:
+            future_reward = immediate_reward
+        else:
+            future_reward = monte_carlo_simulation(
+                env, state, action, num_rollouts, rollout_length
+            )
+            future_reward += discount_factor * lookahead_with_monte_carlo(
+                env, state, depth - 1, discount_factor, num_rollouts, rollout_length
+            )
+
+        best_future_reward = max(best_future_reward, future_reward)
+
+    return best_future_reward
 
 
 def monte_carlo_simulation(env, state, action, num_rollouts=10, rollout_length=5):
