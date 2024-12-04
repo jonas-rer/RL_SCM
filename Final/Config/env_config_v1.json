@@ -6,10 +6,12 @@
     "item_prize": 10,
     "progressive_stock_cost": false,
     "stock_out_max": 1,
-    "order_quantities": [0, 15, 50],
+    "order_qua  ntities": [0, 15, 50],
     "demand_mean": 10,
     "demand_std": 2,
     "demand_noise": 2,
     "demand_noise_std": 2,
-    "demand_prob": 0.4
+    "demand_prob": 0.4,
+    "extreme": false,
+    "seasonality": false
     }
