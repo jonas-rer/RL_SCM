@@ -1,0 +1,102 @@
+[
+    {
+        "episode": 1,
+        "score": -56764.4,
+        "timesteps": 8,
+        "avg_reorder_points": {
+            "0": 36.74,
+            "1": 37.04,
+            "2": 38.85
+        }
+    },
+    {
+        "episode": 2,
+        "score": -2878.799999999999,
+        "timesteps": 100,
+        "avg_reorder_points": {
+            "0": 35.3,
+            "1": 36.48,
+            "2": 36.41
+        }
+    },
+    {
+        "episode": 3,
+        "score": -49741.43,
+        "timesteps": 18,
+        "avg_reorder_points": {
+            "0": 36.58,
+            "1": 37.68,
+            "2": 36.73
+        }
+    },
+    {
+        "episode": 4,
+        "score": -58855.31,
+        "timesteps": 6,
+        "avg_reorder_points": {
+            "0": 33.06,
+            "1": 38.2,
+            "2": 31.49
+        }
+    },
+    {
+        "episode": 5,
+        "score": -58518.71,
+        "timesteps": 7,
+        "avg_reorder_points": {
+            "0": 33.02,
+            "1": 37.36,
+            "2": 35.45
+        }
+    },
+    {
+        "episode": 6,
+        "score": -4669.75,
+        "timesteps": 100,
+        "avg_reorder_points": {
+            "0": 30.54,
+            "1": 36.92,
+            "2": 35.97
+        }
+    },
+    {
+        "episode": 7,
+        "score": -54151.829999999994,
+        "timesteps": 10,
+        "avg_reorder_points": {
+            "0": 33.62,
+            "1": 39.68,
+            "2": 40.61
+        }
+    },
+    {
+        "episode": 8,
+        "score": -24175.43,
+        "timesteps": 64,
+        "avg_reorder_points": {
+            "0": 38.54,
+            "1": 33.16,
+            "2": 35.57
+        }
+    },
+    {
+        "episode": 9,
+        "score": -60390.5,
+        "timesteps": 1,
+        "avg_reorder_points": {
+            "0": 32.94,
+            "1": 35.2,
+            "2": 38.21
+        }
+    },
+    {
+        "episode": 10,
+        "score": -49682.32,
+        "timesteps": 20,
+        "avg_reorder_points": {
+            "0": 35.78,
+            "1": 35.24,
+            "2": 34.53
+        }
+    }
+]
