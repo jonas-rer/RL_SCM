@@ -129,7 +129,7 @@ def plot_safety_stock(df, safety_stock=None):
         safety_stock = []
         for node in df["Node"].unique():
             node_data = df[df["Node"] == node]
-            safety_stock.append(node_data[node_data["Delivery"] > 0]["Stock"].mean())
+            safety_stock.append(node_data[node_data["Action"] > 0]["Stock"].mean())
 
         return safety_stock
 
@@ -172,16 +172,7 @@ def plot_safety_stock(df, safety_stock=None):
                 label=f"Safety Stock: {safety_stock[i]:.1f}",
             )
 
-        cycle_stock = 0.5 * node_data["Stock"].mean() + safety_stock[i]
-        axs[i].axhline(
-            cycle_stock,
-            color="red",
-            linestyle="--",
-            label=f"Cycle stock: {cycle_stock:.1f}",
-        )
-
-        # TODO Pass trough the lead time to calculate the cycle stock
-        # cycle_stock = node_data["Demand"].mean() * node_data["Lead_Time"].mean() + safety_stock[i]
+        # cycle_stock = 0.5 * node_data["Stock"].mean() + safety_stock[i]
         # axs[i].axhline(
         #     cycle_stock,
         #     color="red",

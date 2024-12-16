@@ -6,7 +6,7 @@
     "item_prize": 10,
     "progressive_stock_cost": true,
     "stock_out_max": 1,
-    "order_quantities": [0, 15, 50],
+    "order_quantities": [0, 15, 50, 100],
     "demand_mean": 10,
     "demand_std": 2,
     "demand_noise": 2,
