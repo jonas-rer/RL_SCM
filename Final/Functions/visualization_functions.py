@@ -96,9 +96,8 @@ def plot_data(df):
     axs[2, 3].set_title(f"Stockouts over time: {stockouts}")
 
     # Add a legend to the plot
-    axs[0, 0].legend()
-    axs[1, 0].legend()
-    axs[2, 0].legend()
+    for i in range(len(nodes)):
+        axs[i, 0].legend()
 
     # Add more space between the plots
     plt.subplots_adjust(hspace=0.5)

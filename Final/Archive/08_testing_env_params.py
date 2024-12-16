@@ -27,7 +27,7 @@ from stable_baselines3.common.vec_env import VecFrameStack, DummyVecEnv
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.evaluation import evaluate_policy
 
-from Environment.env_v7 import *
+from Final.Environment.Archive.env_v7 import *
 from Functions.visualization_functions import *
 
 # %%
