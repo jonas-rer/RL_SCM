@@ -1,102 +1,102 @@
 [
     {
         "episode": 1,
-        "score": -33830.85,
+        "score": -127834.51000000001,
         "timesteps": 100
     },
     {
         "episode": 2,
-        "score": -32808.14,
+        "score": -117112.81000000001,
         "timesteps": 100
     },
     {
         "episode": 3,
-        "score": -25134.67000000002,
+        "score": -131125.61,
         "timesteps": 100
     },
     {
         "episode": 4,
-        "score": -37386.799999999996,
+        "score": -77608.61000000002,
         "timesteps": 100
     },
     {
         "episode": 5,
-        "score": 9224.629999999985,
-        "timesteps": 100
+        "score": -51967.770000000004,
+        "timesteps": 8
     },
     {
         "episode": 6,
-        "score": -9947.289999999999,
+        "score": -148287.37999999998,
         "timesteps": 100
     },
     {
         "episode": 7,
-        "score": -21239.860000000004,
-        "timesteps": 100
+        "score": -52134.35,
+        "timesteps": 7
     },
     {
         "episode": 8,
-        "score": -57003.68,
+        "score": -161637.31000000003,
         "timesteps": 100
     },
     {
         "episode": 9,
-        "score": -8203.340000000007,
+        "score": -118485.66,
         "timesteps": 100
     },
     {
         "episode": 10,
-        "score": -12702.210000000001,
+        "score": -131979.1,
         "timesteps": 100
     },
     {
         "episode": 11,
-        "score": -6528.43,
+        "score": -106530.31999999998,
         "timesteps": 100
     },
     {
         "episode": 12,
-        "score": 13352.589999999998,
+        "score": -101915.81999999998,
         "timesteps": 100
     },
     {
         "episode": 13,
-        "score": -47271.55999999998,
+        "score": -131538.48000000004,
         "timesteps": 100
     },
     {
         "episode": 14,
-        "score": -30120.07,
-        "timesteps": 100
+        "score": -49535.200000000004,
+        "timesteps": 17
     },
     {
         "episode": 15,
-        "score": -3872.3500000000013,
-        "timesteps": 100
+        "score": -50535.66,
+        "timesteps": 9
     },
     {
         "episode": 16,
-        "score": 4148.269999999993,
-        "timesteps": 100
+        "score": -35399.04000000001,
+        "timesteps": 21
     },
     {
         "episode": 17,
-        "score": -33403.179999999964,
+        "score": -140900.47999999998,
         "timesteps": 100
     },
     {
         "episode": 18,
-        "score": 540.8200000000088,
+        "score": -174118.34000000003,
         "timesteps": 100
     },
     {
         "episode": 19,
-        "score": 716.9299999999912,
+        "score": -206400.97,
         "timesteps": 100
     },
     {
         "episode": 20,
-        "score": 5252.279999999998,
+        "score": -98848.15999999999,
         "timesteps": 100
     }
 ]
