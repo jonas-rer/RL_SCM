@@ -441,11 +441,6 @@ class SS_Mngmt_Env(Env):
                 writer = csv.DictWriter(csvfile, fieldnames=self.fieldnames)
                 writer.writerow(row)
 
-    def reward_function(self):
-        # TODO - Implement a custom reward function
-
-        return 0
-
     def render(self):
         # Just check episode lenghth and only plot the last one when using matplotlib
         if self.render_mode is not None:

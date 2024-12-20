@@ -81,8 +81,6 @@ def plot_data(df):
             label=f"Mean: {mean_demand:.2f}",
         )
 
-    # Plots the reward over time and the total reward
-    # Plot the 'Reward' over time
     axs[0, 3].plot(df["Time"], df["Reward"], label="Reward per Timestep", color="r")
     axs[0, 3].set_title("Reward over time")
 
@@ -104,9 +102,6 @@ def plot_data(df):
 
     # Show the plot
     plt.show()
-
-
-# Function to visualize the stock and safety stock
 
 
 def plot_safety_stock(df, safety_stock=None):

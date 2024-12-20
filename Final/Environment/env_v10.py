@@ -605,8 +605,6 @@ class SS_Mngmt_Env(Env):
 
         return planned_demand
 
-    import numpy as np
-
     def planned_demand_seasonality(
         self,
         demand_mean=10,
