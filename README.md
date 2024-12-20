@@ -20,9 +20,7 @@ This folder contains the final implementation of the models, training processes,
 - **Archive/**: Contains code that was either incomplete or not used in the final implementation.
 - **Config/**: Configuration files for the environment and network settings.
 - **Data/**: Generated simulation data used for visualization.
-- **Environment/**: Code for the environment.
-- **Version 9 (V9)**: Final version used in the thesis.
-- **Version 10 (V10)**: Extended version capable of handling multi-level supply chains.
+- **Environment/**: Code for the environment. **Version 9 (V9)**: Final version used in the thesis. **Version 10 (V10)**: Extended version capable of handling multi-level supply chains.
 - **Functions/**: Contains algorithms for evaluation or visualization. Includes discarded implementations and utility functions.
 - **Training/**: Saved training data and models, as well as results from the optimization process.
 
